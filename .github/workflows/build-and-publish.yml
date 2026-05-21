@@ -26,23 +26,24 @@ jobs:
   frontend:
     name: Build Frontend (Gulp)
     runs-on: ubuntu-latest
-    container:
-      image: opendigitaleducation/node:10-alpine
-      options: --user root
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
 
-      - name: Install npm dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Build with Gulp
-        run: node_modules/gulp/bin/gulp.js build
+      - name: Build with Node 10 via Docker
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            --user root \
+            opendigitaleducation/node:10-alpine \
+            sh -c "npm install --legacy-peer-deps && node_modules/gulp/bin/gulp.js build"
 
       - name: Upload frontend assets
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-assets
           path: src/main/resources/
+          retention-days: 1
 
   backend:
     name: Build & Publish Fat Mod
@@ -93,7 +94,7 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
 
       - name: Download frontend assets
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
           name: frontend-assets
           path: src/main/resources/
