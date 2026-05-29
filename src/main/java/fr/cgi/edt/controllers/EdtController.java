@@ -11,6 +11,7 @@ import fr.cgi.edt.services.StructureService;
 import fr.cgi.edt.services.StsService;
 import fr.cgi.edt.services.UserService;
 import fr.cgi.edt.services.impl.EdtServiceMongoImpl;
+import fr.cgi.edt.services.impl.RbsBridgeService;
 import fr.cgi.edt.services.impl.StructureServiceNeo4jImpl;
 import fr.cgi.edt.services.impl.StsServiceMongoImpl;
 import fr.cgi.edt.services.impl.UserServiceNeo4jImpl;
@@ -103,7 +104,18 @@ public class EdtController extends MongoDbControllerHelper {
     @Trace("POST_COURSE")
     @ApiDoc("Create a course with 1 or more occurrences")
     public void create(final HttpServerRequest request) {
-        RequestUtils.bodyToJsonArray(request, body -> edtService.create(body, getServiceHandler(request)));
+        RequestUtils.bodyToJsonArray(request, body ->
+            UserUtils.getUserInfos(eb, request, user ->
+                edtService.create(body, result -> {
+                    if (result.isRight()) {
+                        renderJson(request, result.right().getValue());
+                        RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
+                    } else {
+                        renderError(request);
+                    }
+                })
+            )
+        );
     }
 
     @Put("/course")
@@ -111,8 +123,19 @@ public class EdtController extends MongoDbControllerHelper {
     @Trace("PUT_COURSE")
     @ResourceFilter(ManageCourseWorkflowAction.class)
     @ApiDoc("Update course")
-    public void update (final HttpServerRequest request) {
-        RequestUtils.bodyToJsonArray(request, body -> edtService.update(body, getServiceHandler(request)));
+    public void update(final HttpServerRequest request) {
+        RequestUtils.bodyToJsonArray(request, body ->
+            UserUtils.getUserInfos(eb, request, user ->
+                edtService.update(body, result -> {
+                    if (result.isRight()) {
+                        renderJson(request, result.right().getValue());
+                        RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
+                    } else {
+                        renderError(request);
+                    }
+                })
+            )
+        );
     }
 
     @Put("/courses/tag")

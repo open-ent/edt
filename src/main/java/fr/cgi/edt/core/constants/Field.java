@@ -95,6 +95,9 @@ public class Field {
     public static final String SPACE = " ";
     public static final String URL_SPACE = "%20";
 
+    // RBS bridge
+    public static final String RBS_RESOURCE_IDS = "rbsResourceIds";
+
     private Field() {
         throw new IllegalStateException("Utility class");
     }
