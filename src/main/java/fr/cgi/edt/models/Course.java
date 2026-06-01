@@ -32,6 +32,7 @@ public class Course implements IModel<Course> {
     private String recurrence;
     private String idStartSlot;
     private String idEndSlot;
+    private List<Integer> rbsResourceIds;
 
 
     public Course() {
@@ -61,6 +62,7 @@ public class Course implements IModel<Course> {
         this.recurrence = json.getString(Field.RECURRENCE);
         this.idStartSlot = json.getString(Field.IDSTARTSLOT);
         this.idEndSlot = json.getString(Field.IDENDSLOT);
+        this.rbsResourceIds = JsonHelper.jsonArrayToList(json.getJsonArray(Field.RBS_RESOURCE_IDS, new JsonArray()), Integer.class);
     }
 
     public String getId() {
@@ -258,6 +260,15 @@ public class Course implements IModel<Course> {
 
     public Course setIdEndSlot(String idEndSlot) {
         this.idEndSlot = idEndSlot;
+        return this;
+    }
+
+    public List<Integer> getRbsResourceIds() {
+        return rbsResourceIds;
+    }
+
+    public Course setRbsResourceIds(List<Integer> rbsResourceIds) {
+        this.rbsResourceIds = rbsResourceIds;
         return this;
     }
 
