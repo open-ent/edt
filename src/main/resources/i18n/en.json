@@ -1,5 +1,9 @@
 {
   "Week": "Week",
+  "edt.push.notif.course.changed.title": "Timetable updated",
+  "edt.course.action.created": "added the lesson",
+  "edt.course.action.updated": "updated the lesson",
+  "edt.course.action.deleted": "removed the lesson",
   "all.structures.id": "all_Structures",
   "all.structures.label": "All my institutions",
   "child.select": "Child",

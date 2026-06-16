@@ -10,6 +10,7 @@ import fr.cgi.edt.services.EdtService;
 import fr.cgi.edt.services.StructureService;
 import fr.cgi.edt.services.StsService;
 import fr.cgi.edt.services.UserService;
+import fr.cgi.edt.services.impl.EdtNotifyService;
 import fr.cgi.edt.services.impl.EdtServiceMongoImpl;
 import fr.cgi.edt.services.impl.RbsBridgeService;
 import fr.cgi.edt.services.impl.StructureServiceNeo4jImpl;
@@ -26,6 +27,7 @@ import fr.wseduc.webutils.Either;
 import fr.wseduc.webutils.http.Renders;
 import fr.wseduc.webutils.request.RequestUtils;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonArray;
@@ -37,10 +39,14 @@ import org.entcore.common.http.filter.ResourceFilter;
 import org.entcore.common.http.filter.Trace;
 import org.entcore.common.mongodb.MongoDbControllerHelper;
 import org.entcore.common.neo4j.Neo4j;
+import org.entcore.common.notification.TimelineHelper;
+import org.entcore.common.user.UserInfos;
 import org.entcore.common.user.UserUtils;
+import org.vertx.java.core.http.RouteMatcher;
 
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.entcore.common.http.response.DefaultResponseHandler.*;
@@ -56,6 +62,7 @@ public class EdtController extends MongoDbControllerHelper {
     private StsService stsService = new StsServiceMongoImpl();
     private static final Logger LOGGER = LoggerFactory.getLogger(EdtServiceMongoImpl.class);
     private final EventStore eventStore;
+    private EdtNotifyService notifyService;
 
 
 
@@ -73,6 +80,13 @@ public class EdtController extends MongoDbControllerHelper {
         edtService = new EdtServiceMongoImpl(collection, eb);
         userService = new UserServiceNeo4jImpl();
         this.eventStore = eventStore;
+    }
+
+    @Override
+    public void init(Vertx vertx, JsonObject config, RouteMatcher rm,
+                     Map<String, fr.wseduc.webutils.security.SecuredAction> securedActions) {
+        super.init(vertx, config, rm, securedActions);
+        this.notifyService = new EdtNotifyService(new TimelineHelper(vertx, vertx.eventBus(), config), Neo4j.getInstance());
     }
 
     /**
@@ -110,6 +124,8 @@ public class EdtController extends MongoDbControllerHelper {
                     if (result.isRight()) {
                         renderJson(request, result.right().getValue());
                         RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
+                        if (notifyService != null && body != null && !body.isEmpty())
+                            notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "created");
                     } else {
                         renderError(request);
                     }
@@ -130,6 +146,8 @@ public class EdtController extends MongoDbControllerHelper {
                     if (result.isRight()) {
                         renderJson(request, result.right().getValue());
                         RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
+                        if (notifyService != null && body != null && !body.isEmpty())
+                            notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "updated");
                     } else {
                         renderError(request);
                     }
@@ -181,10 +199,24 @@ public class EdtController extends MongoDbControllerHelper {
     @ApiDoc("Delete a course")
     public void delete (final HttpServerRequest request) {
         try {
-            String id = request.params().get("id");
-            edtService.delete(id, notEmptyResponseHandler(request));
+            final String id = request.params().get("id");
+            // On récupère le cours AVANT suppression (classes/matière) pour notifier les élèves.
+            UserUtils.getUserInfos(eb, request, user ->
+                MongoDb.getInstance().findOne(fr.cgi.edt.Edt.EDT_COLLECTION, new JsonObject().put("_id", id), msg -> {
+                    final JsonObject course = "ok".equals(msg.body().getString("status"))
+                            ? msg.body().getJsonObject("result") : null;
+                    edtService.delete(id, res -> {
+                        if (res.isRight()) {
+                            renderJson(request, res.right().getValue());
+                            if (notifyService != null && course != null)
+                                notifyService.notifyCourseChange(request, user, course, "deleted");
+                        } else {
+                            renderError(request);
+                        }
+                    });
+                }));
         } catch (ClassCastException e) {
-            log.error("");
+            LOGGER.error("[EdtController::delete] bad request", e);
             badRequest(request);
         }
     }

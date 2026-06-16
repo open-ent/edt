@@ -1,5 +1,9 @@
 {
   "Week": "Semaine",
+  "edt.push.notif.course.changed.title": "Emploi du temps mis à jour",
+  "edt.course.action.created": "a ajouté le cours",
+  "edt.course.action.updated": "a modifié le cours",
+  "edt.course.action.deleted": "a supprimé le cours",
   "all.structures.id": "all_Structures",
   "all.structures.label": "Tous mes établissements",
   "child.select": "Enfant",
