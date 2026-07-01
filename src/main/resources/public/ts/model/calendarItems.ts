@@ -182,12 +182,12 @@ export class CalendarItems {
 
             this.all = datas.map((item: CalendarItem): CalendarItem => {
                 item = new CalendarItem(item, item.startDate, item.endDate);
-                if (item.exceptionnal && item.course.subjectId === lang.translate("exceptionnal.id")) {
-                    item.course.subjectLabel = item.exceptionnal;
-
-                } else {
-                    item.course.subjectLabel = item.course.subject.name;
-                }
+                // Matière personnalisée : subjectId vaut null (pas la sentinelle "exceptionnal.id"),
+                // donc on se fie à item.exceptionnal ; on garde subject.name pour les matières standard
+                // (garde d'undefined pour éviter de casser le rendu du calendrier).
+                item.course.subjectLabel = item.exceptionnal
+                    ? item.exceptionnal
+                    : (item.course.subject ? item.course.subject.name : '');
 
                 item.course.teachers = item.course.teacherIds.map((teacherId: string): Teacher  => {
                      return structure.teachers.all.find((teacher: Teacher): boolean => teacher.id === teacherId);
