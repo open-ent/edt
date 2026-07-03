@@ -13,6 +13,14 @@ export interface Matiere {
   name: string;
 }
 
+/** Créneau horaire du référentiel de la structure. */
+export interface TimeSlot {
+  id: string;
+  name: string;
+  startHour: string;
+  endHour: string;
+}
+
 /** Un cours de l'emploi du temps (sous-ensemble utile en lecture). Dates ISO datetime. */
 export interface Course {
   _id: string;
@@ -24,6 +32,8 @@ export interface Course {
   classes?: string[];
   groups?: string[];
   dayOfWeek?: number;
+  idStartSlot?: string;
+  idEndSlot?: string;
   startDate: string;
   endDate: string;
 }
@@ -53,6 +63,12 @@ const base = { credentials: 'include' as const };
 const mutHeaders = () => ({ 'Content-Type': 'application/json', ...xsrfHeader() });
 
 // ── Référentiel (module viescolaire, même établissement) ───────────────────────
+/** Créneaux horaires (référentiel) de la structure, triés par heure de début. */
+export const getTimeSlots = async (structureId: string): Promise<TimeSlot[]> =>
+  json<TimeSlot[]>(await fetch(`/edt/time-slots?structureId=${structureId}`, base)).then((arr) =>
+    [...arr].sort((a, b) => (a.startHour || '').localeCompare(b.startHour || '')),
+  );
+
 export const getClasses = async (structureId: string): Promise<Klass[]> =>
   json<Array<{ id: string; name: string; externalId?: string }>>(
     await fetch(`/viescolaire/classes?idEtablissement=${structureId}`, base),
@@ -92,4 +108,4 @@ export const getCoursesForClass = async (
   );
 };
 
-export const api = { getClasses, getMatieres, getCoursesForClass };
+export const api = { getClasses, getMatieres, getTimeSlots, getCoursesForClass };
