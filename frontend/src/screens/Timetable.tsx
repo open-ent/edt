@@ -28,6 +28,8 @@ export function Timetable() {
   const matieresQuery = useQuery({ queryKey: ['edt', 'matieres', structureId], queryFn: () => api.getMatieres(structureId), enabled: !!structureId });
   const slotsQuery = useQuery({ queryKey: ['edt', 'timeslots', structureId], queryFn: () => api.getTimeSlots(structureId), enabled: !!structureId });
 
+  const teacherId = (user as { userId?: string; id?: string } | undefined)?.userId ?? (user as { id?: string } | undefined)?.id ?? '';
+  const isMine = classId === '__me__';
   const classes = classesQuery.data ?? [];
   const selectedClass: Klass | undefined = classes.find((c) => c.id === classId);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
@@ -36,10 +38,14 @@ export function Timetable() {
 
   const startAt = ymd(monday);
   const endAt = ymd(addDays(monday, 6));
+  const hasSelection = isMine ? !!teacherId : !!selectedClass;
   const coursesQuery = useQuery({
     queryKey: ['edt', 'courses', structureId, classId, startAt, endAt],
-    queryFn: () => api.getCoursesForClass(structureId, selectedClass!, startAt, endAt),
-    enabled: !!structureId && !!selectedClass,
+    queryFn: () =>
+      isMine
+        ? api.getCoursesForTeacher(structureId, teacherId, startAt, endAt)
+        : api.getCoursesForClass(structureId, selectedClass!, startAt, endAt),
+    enabled: !!structureId && hasSelection,
   });
 
   const courses = [...(coursesQuery.data ?? [])].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
@@ -74,7 +80,8 @@ export function Timetable() {
         <div>
           <label htmlFor="edt-class" className="form-label">{t('edt.class', { defaultValue: 'Classe' })}</label>
           <select id="edt-class" className="form-select" value={classId} onChange={(e) => setClassId(e.target.value)}>
-            <option value="">{t('edt.class.choose', { defaultValue: 'Choisir une classe…' })}</option>
+            <option value="">{t('edt.class.choose', { defaultValue: 'Choisir…' })}</option>
+            {teacherId && <option value="__me__">{t('edt.mine', { defaultValue: 'Mon emploi du temps' })}</option>}
             {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
@@ -97,18 +104,18 @@ export function Timetable() {
         </div>
       </div>
 
-      {!selectedClass && (
+      {!hasSelection && (
         <p className="text-muted">{t('edt.select.class', { defaultValue: 'Sélectionnez une classe pour afficher son emploi du temps.' })}</p>
       )}
 
-      {selectedClass && coursesQuery.isLoading && <p>{t('edt.loading', { defaultValue: 'Chargement…' })}</p>}
+      {hasSelection && coursesQuery.isLoading && <p>{t('edt.loading', { defaultValue: 'Chargement…' })}</p>}
 
-      {selectedClass && !coursesQuery.isLoading && courses.length === 0 && view === 'list' && (
+      {hasSelection && !coursesQuery.isLoading && courses.length === 0 && view === 'list' && (
         <p className="text-muted">{t('edt.courses.empty', { defaultValue: 'Aucun cours sur cette semaine.' })}</p>
       )}
 
       {/* Vue GRILLE : créneaux horaires × jours */}
-      {selectedClass && view === 'grid' && slots.length > 0 && (
+      {hasSelection && view === 'grid' && slots.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ tableLayout: 'fixed', minWidth: 760 }}>
             <thead>
@@ -147,7 +154,7 @@ export function Timetable() {
       )}
 
       {/* Vue LISTE */}
-      {selectedClass && view === 'list' && courses.length > 0 && (
+      {hasSelection && view === 'list' && courses.length > 0 && (
         <table className="table">
           <thead>
             <tr>

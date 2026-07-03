@@ -108,4 +108,29 @@ export const getCoursesForClass = async (
   );
 };
 
-export const api = { getClasses, getMatieres, getTimeSlots, getCoursesForClass };
+/** Cours d'un enseignant sur la période (POST de lecture, filtre par teacherIds). « Mon emploi du temps ». */
+export const getCoursesForTeacher = async (
+  structureId: string,
+  teacherId: string,
+  startAt: string,
+  endAt: string,
+): Promise<Course[]> => {
+  const filter: CoursesFilter = {
+    teacherIds: [teacherId],
+    groupIds: [],
+    groupExternalIds: [],
+    groupNames: [],
+    union: true,
+    crossDateFilter: true,
+  };
+  return json<Course[]>(
+    await fetch(`/edt/structures/${structureId}/common/courses/${startAt}/${endAt}`, {
+      ...base,
+      method: 'POST',
+      headers: mutHeaders(),
+      body: JSON.stringify(filter),
+    }),
+  );
+};
+
+export const api = { getClasses, getMatieres, getTimeSlots, getCoursesForClass, getCoursesForTeacher };
