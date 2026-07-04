@@ -85,14 +85,26 @@ export function Timetable() {
   const courses = [...(coursesQuery.data ?? [])].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
 
   // Indexation des cours par (créneau de début, jour de la semaine) pour la grille.
+  // Les cours créés manuellement n'ont pas d'idStartSlot : le créneau est alors résolu
+  // par l'heure de début (slot dont l'intervalle contient l'heure du cours).
   const byCell = useMemo(() => {
+    const toMin = (s?: string) => {
+      const m2 = /(\d{1,2}):(\d{2})/.exec(s ?? '');
+      return m2 ? Number(m2[1]) * 60 + Number(m2[2]) : -1;
+    };
+    const slotFor = (c: Course) => {
+      if (c.idStartSlot) return c.idStartSlot;
+      const startMin = toMin((c.startDate || '').slice(11, 16));
+      return slots.find((sl) => toMin(sl.startHour) <= startMin && startMin < toMin(sl.endHour))?.id;
+    };
     const m = new Map<string, Course>();
     for (const c of courses) {
       const dow = c.dayOfWeek ?? ((new Date(c.startDate).getDay() + 6) % 7) + 1;
-      if (c.idStartSlot) m.set(`${c.idStartSlot}|${dow}`, c);
+      const slotId = slotFor(c);
+      if (slotId) m.set(`${slotId}|${dow}`, c);
     }
     return m;
-  }, [courses]);
+  }, [courses, slots]);
 
   if (init && !structureId) {
     return (
