@@ -1,6 +1,6 @@
 import { useEdificeClient } from '@open-ent/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api, Course, Klass } from '../api';
@@ -30,6 +30,12 @@ export function Timetable() {
 
   const teacherId = (user as { userId?: string; id?: string } | undefined)?.userId ?? (user as { id?: string } | undefined)?.id ?? '';
   const isMine = classId === '__me__';
+
+  // Parité Angular : afficher d'emblée l'emploi du temps de l'utilisateur connecté
+  // (au lieu d'un état vide tant qu'aucune classe n'est choisie).
+  useEffect(() => {
+    if (teacherId) setClassId((prev) => (prev === '' ? '__me__' : prev));
+  }, [teacherId]);
   const classes = classesQuery.data ?? [];
   const selectedClass: Klass | undefined = classes.find((c) => c.id === classId);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
