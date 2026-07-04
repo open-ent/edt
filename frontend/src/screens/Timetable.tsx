@@ -1,5 +1,5 @@
 import { useEdificeClient } from '@open-ent/react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +18,7 @@ const JOURS: Array<{ dow: number; label: string }> = [
 export function Timetable() {
   const { t } = useTranslation(['edt', 'common']);
   const { user, init } = useEdificeClient();
+  const qc = useQueryClient();
   const structureId = user?.structures?.[0] ?? '';
 
   const [classId, setClassId] = useState('');
@@ -36,6 +37,33 @@ export function Timetable() {
   useEffect(() => {
     if (teacherId) setClassId((prev) => (prev === '' ? '__me__' : prev));
   }, [teacherId]);
+
+  // Création d'un cours ponctuel (parité Angular « Créer un cours », POST /edt/course).
+  const [creating, setCreating] = useState(false);
+  const [newSubjectId, setNewSubjectId] = useState('');
+  const [newClassName, setNewClassName] = useState('');
+  const [newRoom, setNewRoom] = useState('');
+  const [newDate, setNewDate] = useState('');
+  const [newStart, setNewStart] = useState('09:00');
+  const [newEnd, setNewEnd] = useState('10:00');
+  const createMut = useMutation({
+    mutationFn: () =>
+      api.createCourse({
+        structureId,
+        subjectId: newSubjectId,
+        teacherId,
+        className: newClassName,
+        room: newRoom.trim() || undefined,
+        date: newDate,
+        startTime: newStart,
+        endTime: newEnd,
+      }),
+    onSuccess: () => {
+      setCreating(false);
+      qc.invalidateQueries({ queryKey: ['edt', 'courses'] });
+    },
+  });
+  const newCourseValid = !!(newSubjectId && newClassName && newDate && newStart && newEnd && teacherId);
   const classes = classesQuery.data ?? [];
   const selectedClass: Klass | undefined = classes.find((c) => c.id === classId);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
@@ -79,7 +107,67 @@ export function Timetable() {
 
   return (
     <div>
-      <h1 className="mb-16">{t('edt.title', { defaultValue: 'Emploi du temps' })}</h1>
+      <div className="d-flex align-items-center justify-content-between mb-16 flex-wrap gap-8">
+        <h1 className="m-0">{t('edt.title', { defaultValue: 'Emploi du temps' })}</h1>
+        {!creating && teacherId && (
+          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+            {t('edt.course.new', { defaultValue: 'Créer un cours' })}
+          </button>
+        )}
+      </div>
+
+      {creating && (
+        <form
+          className="card p-16 mb-16"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (newCourseValid) createMut.mutate();
+          }}
+        >
+          <h2 style={{ fontSize: 18 }} className="mb-12">{t('edt.course.new', { defaultValue: 'Créer un cours' })}</h2>
+          <div className="d-flex gap-12 flex-wrap mb-12">
+            <div>
+              <label htmlFor="nc-subject" className="form-label">{t('edt.subject', { defaultValue: 'Matière' })}</label>
+              <select id="nc-subject" className="form-select" value={newSubjectId} onChange={(e) => setNewSubjectId(e.target.value)} required>
+                <option value="">—</option>
+                {(matieresQuery.data ?? []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="nc-class" className="form-label">{t('edt.class', { defaultValue: 'Classe' })}</label>
+              <select id="nc-class" className="form-select" value={newClassName} onChange={(e) => setNewClassName(e.target.value)} required>
+                <option value="">—</option>
+                {classes.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="nc-date" className="form-label">{t('edt.date', { defaultValue: 'Date' })}</label>
+              <input id="nc-date" type="date" className="form-control" value={newDate} onChange={(e) => setNewDate(e.target.value)} required />
+            </div>
+            <div>
+              <label htmlFor="nc-start" className="form-label">{t('edt.start', { defaultValue: 'Début' })}</label>
+              <input id="nc-start" type="time" className="form-control" value={newStart} onChange={(e) => setNewStart(e.target.value)} required />
+            </div>
+            <div>
+              <label htmlFor="nc-end" className="form-label">{t('edt.end', { defaultValue: 'Fin' })}</label>
+              <input id="nc-end" type="time" className="form-control" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} required />
+            </div>
+            <div>
+              <label htmlFor="nc-room" className="form-label">{t('edt.room', { defaultValue: 'Salle' })}</label>
+              <input id="nc-room" type="text" className="form-control" value={newRoom} onChange={(e) => setNewRoom(e.target.value)} />
+            </div>
+          </div>
+          {createMut.isError && (
+            <div className="alert alert-warning" role="alert">{t('edt.course.error', { defaultValue: 'La création du cours a échoué (droit requis).' })}</div>
+          )}
+          <div className="d-flex gap-8">
+            <button type="submit" className="btn btn-primary" disabled={!newCourseValid || createMut.isPending}>
+              {t('edt.course.create', { defaultValue: 'Créer' })}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setCreating(false)}>{t('edt.cancel', { defaultValue: 'Annuler' })}</button>
+          </div>
+        </form>
+      )}
 
       {/* Barre de contrôle : classe + navigation semaine */}
       <div className="d-flex gap-16 flex-wrap align-items-end mb-16">

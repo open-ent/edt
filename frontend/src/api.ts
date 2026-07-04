@@ -96,7 +96,7 @@ export const getCoursesForClass = async (
     groupExternalIds: klass.externalId ? [klass.externalId] : [],
     groupNames: [klass.name],
     union: true,
-    crossDateFilter: true,
+    crossDateFilter: false, // true ne renvoie que les cours COUVRANT toute la période (récurrences), pas les occurrences ponctuelles
   };
   return json<Course[]>(
     await fetch(`/edt/structures/${structureId}/common/courses/${startAt}/${endAt}`, {
@@ -121,7 +121,7 @@ export const getCoursesForTeacher = async (
     groupExternalIds: [],
     groupNames: [],
     union: true,
-    crossDateFilter: true,
+    crossDateFilter: false, // true ne renvoie que les cours COUVRANT toute la période (récurrences), pas les occurrences ponctuelles
   };
   return json<Course[]>(
     await fetch(`/edt/structures/${structureId}/common/courses/${startAt}/${endAt}`, {
@@ -133,4 +133,34 @@ export const getCoursesForTeacher = async (
   );
 };
 
-export const api = { getClasses, getMatieres, getTimeSlots, getCoursesForClass, getCoursesForTeacher };
+/** Crée un cours ponctuel (POST /edt/course — le backend attend un TABLEAU de cours). */
+export const createCourse = async (data: {
+  structureId: string;
+  subjectId: string;
+  teacherId: string;
+  className: string;
+  room?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+}): Promise<void> => {
+  const dow = new Date(`${data.date}T12:00:00`).getDay(); // 0=dim … 6=sam (convention Mongo courses)
+  const course = {
+    structureId: data.structureId,
+    subjectId: data.subjectId,
+    teacherIds: [data.teacherId],
+    classes: [data.className],
+    groups: [],
+    roomLabels: data.room ? [data.room] : [],
+    startDate: `${data.date}T${data.startTime}:00`,
+    endDate: `${data.date}T${data.endTime}:00`,
+    dayOfWeek: dow,
+    manual: true,
+    theoretical: false,
+    everyTwoWeek: false,
+  };
+  const res = await fetch('/edt/course', { ...base, method: 'POST', headers: mutHeaders(), body: JSON.stringify([course]) });
+  if (!res.ok) throw new Error(String(res.status));
+};
+
+export const api = { getClasses, getMatieres, getTimeSlots, getCoursesForClass, getCoursesForTeacher, createCourse };
