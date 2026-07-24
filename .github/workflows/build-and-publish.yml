@@ -39,6 +39,25 @@ jobs:
             opendigitaleducation/node:10-alpine \
             sh -c "npm install --legacy-peer-deps && node_modules/gulp/bin/gulp.js build"
 
+      # [B] IHM React (vue *-react.html -> /<module>/public/index.js) : sous-projet Vite
+      # frontend/ (Node 20), paquets prives @open-ent -> auth OPENENT_PACKAGES_TOKEN. La copie
+      # dans resources/public est embarquee par l'upload frontend-assets ci-dessous (fat-mod complet).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Build frontend React (sous-projet Vite frontend/)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.OPENENT_PACKAGES_TOKEN }}
+        run: |
+          cd frontend
+          pnpm install --no-frozen-lockfile
+          pnpm build
+          mkdir -p ../src/main/resources/public
+          cp -r dist/public/. ../src/main/resources/public/
+
       - name: Upload frontend assets
         uses: actions/upload-artifact@v4
         with:
