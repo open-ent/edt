@@ -97,7 +97,8 @@ public class EdtController extends MongoDbControllerHelper {
     @SecuredAction(read_only)
     public void view(HttpServerRequest request) {
         // CCTP 51C — bascule AngularJS/React. Défaut piloté par la conf `frontend-ui`
-        // (fallback "angular"), surchargée à la demande par `?ui=react|angular`.
+        // (bloc du module dans ent-core.yaml, alimentée par FRONTEND_UI_DEFAULT ; fallback "angular"),
+        // surchargée à la demande par `?ui=react|angular`.
         final String uiParam = request.params().get("ui");
         final String frontendUi = "react".equals(config.getString("frontend-ui", "angular")) ? "react" : "angular";
         final String ui = ("react".equals(uiParam) || "angular".equals(uiParam)) ? uiParam : frontendUi;
