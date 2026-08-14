@@ -48,6 +48,9 @@ export class Course {
     display: any;
     recurrenceObject: any;
     timeToDelete?: Array<string>;
+    // Documents attachés (espace documentaire + médiacentre). Persisté tel quel dans Mongo
+    // (schemaless) ; le constructeur générique le relit, toJSON() le renvoie.
+    resources: Array<any> = [];
 
     constructor(obj?: object) {
         if (obj && obj instanceof Object) {
@@ -159,7 +162,8 @@ export class Course {
             everyTwoWeek: this.everyTwoWeek,
             exceptionnal: (this.exceptionnal) ? this.exceptionnal : undefined,
             updated: moment(),
-            lastUser: model.me.login
+            lastUser: model.me.login,
+            resources: this.resources || []
         };
 
         if (!this.structureId && this.structure && this.structure.id) {

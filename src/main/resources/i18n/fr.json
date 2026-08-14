@@ -224,5 +224,14 @@
   "utils.structure": "Structures",
   "utils.structure.choose.one": "Choisissez une structure",
   "utils.teacher.choose.one": "Choisissez un enseignant",
-  "utils.teachers": "Enseignants"
+  "utils.teachers": "Enseignants",
+  "edt.resources.label": "Documents attachés",
+  "edt.resources.add.workspace": "Ajouter un document de l'espace documentaire",
+  "edt.resources.add.mediacentre": "Ajouter une ressource du médiacentre",
+  "edt.resources.picker.hint": "Sélectionnez un ou plusieurs documents à attacher au cours.",
+  "edt.resources.mediacentre.search": "Rechercher",
+  "edt.resources.mediacentre.search.placeholder": "Rechercher une ressource dans le médiacentre",
+  "edt.resources.mediacentre.loading": "Recherche en cours…",
+  "edt.resources.mediacentre.empty": "Saisissez un terme puis lancez la recherche.",
+  "edt.resources.mediacentre.noresult": "Aucune ressource trouvée."
 }

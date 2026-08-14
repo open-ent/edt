@@ -1,4 +1,5 @@
 import {_, moment, ng, idiom as lang} from 'entcore';
+import http from 'axios';
 import {COMBO_LABELS, Course, CourseOccurrence, DAYS_OF_WEEK, Group,
         Structure, Subject, Subjects, Teacher, Utils} from '../model';
 import {TimeSlot, TimeSlots} from "../model/timeSlots";
@@ -29,6 +30,114 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         $scope.courseTags = [];
         $scope.deleteOnlyOneCourse = true;
         $scope.isExceptional = false;
+
+        // ============================================================================
+        // Documents attachés au cours (espace documentaire + médiacentre)
+        // Calqué sur le module cahier de textes (diary). 100 % front : le champ
+        // course.resources est persisté tel quel dans Mongo (schemaless).
+        // ============================================================================
+        $scope.display = $scope.display || {};
+        if (!$scope.course.resources) { $scope.course.resources = []; }
+
+        // --- Espace documentaire (media-library) ---
+        $scope.openCourseResourcePicker = function (): void {
+            $scope.documents = [];
+            $scope.display.courseResourcePicker = true;
+        };
+        $scope.addCourseWorkspaceResources = function (): void {
+            const mlEls: any = document.getElementsByTagName('media-library');
+            let docs: any[] = [];
+            if (mlEls && mlEls.length) {
+                const mlScope: any = window.angular.element(mlEls[mlEls.length - 1]).scope();
+                docs = (mlScope && mlScope.documents) ? mlScope.documents : ($scope.documents || []);
+            } else {
+                docs = $scope.documents || [];
+            }
+            if (!$scope.course.resources) { $scope.course.resources = []; }
+            docs.forEach((doc: any) => {
+                const id: string = doc._id || doc.id;
+                const already: boolean = $scope.course.resources
+                    .some((r: any) => r.type === 'workspace' && r.id === id);
+                if (id && !already) {
+                    $scope.course.resources.push({
+                        type: 'workspace',
+                        id: id,
+                        name: doc.name || doc.title || id,
+                        url: '/workspace/document/' + id
+                    });
+                }
+            });
+            $scope.documents = [];
+            $scope.display.courseResourcePicker = false;
+            Utils.safeApply($scope);
+        };
+        $scope.removeCourseResource = function (index: number): void {
+            if ($scope.course.resources) { $scope.course.resources.splice(index, 1); }
+        };
+
+        // --- Médiacentre (recherche) ---
+        const MEDIACENTRE_SOURCES: string[] = [
+            'fr.openent.mediacentre.source.GAR',
+            'fr.openent.mediacentre.source.Signet',
+            'fr.openent.mediacentre.source.Moodle',
+            'fr.openent.mediacentre.source.PMB'
+        ];
+        $scope.mediacentreQuery = '';
+        $scope.mediacentreResources = [];
+        $scope.mediacentreLoading = false;
+        $scope.mediacentreSearched = false;
+
+        $scope.openCourseMediacentrePicker = function (): void {
+            $scope.mediacentreQuery = '';
+            $scope.mediacentreResources = [];
+            $scope.mediacentreSearched = false;
+            $scope.display.courseMediacentrePicker = true;
+        };
+
+        $scope.searchMediacentre = async function (queryArg?: string): Promise<void> {
+            // queryArg = valeur du champ (scope enfant du <lightbox>) ; fallback scope parent.
+            const q: string = ((queryArg != null ? queryArg : $scope.mediacentreQuery) || '').trim();
+            if (!q) { return; }
+            $scope.mediacentreLoading = true;
+            $scope.mediacentreResources = [];
+            Utils.safeApply($scope);
+            const jsondata: string = JSON.stringify({
+                state: 'PLAIN_TEXT', event: 'search',
+                sources: MEDIACENTRE_SOURCES, data: {query: q}
+            });
+            try {
+                const {data}: any = await http.get('/mediacentre/search?jsondata=' + encodeURIComponent(jsondata));
+                const frames: any[] = Array.isArray(data) ? data : [];
+                const resources: any[] = [];
+                frames.forEach((f: any) => {
+                    const list: any[] = (f && f.data && Array.isArray(f.data.resources)) ? f.data.resources : [];
+                    list.forEach((r: any) => resources.push(r));
+                });
+                $scope.mediacentreResources = resources;
+            } catch (e) {
+                $scope.mediacentreResources = [];
+            }
+            $scope.mediacentreSearched = true;
+            $scope.mediacentreLoading = false;
+            Utils.safeApply($scope);
+        };
+
+        $scope.addCourseMediacentreResource = function (res: any): void {
+            if (!$scope.course.resources) { $scope.course.resources = []; }
+            const id: string = (res.id != null) ? String(res.id) : (res.link || res.title);
+            const already: boolean = $scope.course.resources
+                .some((r: any) => r.type === 'mediacentre' && String(r.id) === String(id));
+            if (id && !already) {
+                $scope.course.resources.push({
+                    type: 'mediacentre', id: id,
+                    name: res.title || res.link || id,
+                    url: res.link || res.url || '',
+                    image: res.image || ''
+                });
+            }
+            $scope.display.courseMediacentrePicker = false;
+            Utils.safeApply($scope);
+        };
 
         $scope.setTimeSlot = (): void => {
             $scope.display.checkbox = true;

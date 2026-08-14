@@ -224,5 +224,14 @@
   "utils.structure": "Institutions",
   "utils.structure.choose.one": "Choose an institution",
   "utils.teacher.choose.one": "Choose a teacher",
-  "utils.teachers": "Teachers"
+  "utils.teachers": "Teachers",
+  "edt.resources.label": "Attached documents",
+  "edt.resources.add.workspace": "Add a document from the workspace",
+  "edt.resources.add.mediacentre": "Add a resource from the mediacentre",
+  "edt.resources.picker.hint": "Select one or more documents to attach to the lesson.",
+  "edt.resources.mediacentre.search": "Search",
+  "edt.resources.mediacentre.search.placeholder": "Search a resource in the mediacentre",
+  "edt.resources.mediacentre.loading": "Searching…",
+  "edt.resources.mediacentre.empty": "Type a term then start the search.",
+  "edt.resources.mediacentre.noresult": "No resource found."
 }

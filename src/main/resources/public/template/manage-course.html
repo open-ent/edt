@@ -357,6 +357,74 @@
             </div>
         </article>
 
+        <!-- Documents attachés au cours (espace documentaire + médiacentre) -->
+        <div class="row edt-resources" style="margin: 12px 0;">
+            <label class="block"><i18n>edt.resources.label</i18n></label>
+            <ul ng-if="course.resources.length" style="list-style:none; padding:0; margin:6px 0;">
+                <li ng-repeat="res in course.resources track by $index"
+                    style="display:flex; align-items:center; gap:8px; padding:4px 0;">
+                    <img ng-if="res.image" ng-src="[[res.image]]" width="24" style="border-radius:2px;"/>
+                    <a ng-href="[[res.url]]" target="_blank" ng-if="res.url">[[res.name]]</a>
+                    <span ng-if="!res.url">[[res.name]]</span>
+                    <i class="close" style="cursor:pointer;" ng-click="removeCourseResource($index)"></i>
+                </li>
+            </ul>
+            <button type="button" ng-click="openCourseResourcePicker()">
+                <i18n>edt.resources.add.workspace</i18n>
+            </button>
+            <button type="button" ng-click="openCourseMediacentrePicker()">
+                <i18n>edt.resources.add.mediacentre</i18n>
+            </button>
+        </div>
+
+        <!-- Picker : documents de l'espace documentaire -->
+        <lightbox show="display.courseResourcePicker" on-close="display.courseResourcePicker = false">
+            <h2><i18n>edt.resources.add.workspace</i18n></h2>
+            <p class="info"><i18n>edt.resources.picker.hint</i18n></p>
+            <media-library ng-if="display.courseResourcePicker"
+                           visibility="'protected'" multiple="true"
+                           ng-model="documents" file-format="'any'"
+                           ng-change="addCourseWorkspaceResources()"></media-library>
+            <div class="row">
+                <button type="button" class="cancel right-magnet" ng-click="display.courseResourcePicker = false">
+                    <i18n>edt.utils.cancel</i18n>
+                </button>
+            </div>
+        </lightbox>
+
+        <!-- Picker : ressources du médiacentre (recherche) -->
+        <lightbox show="display.courseMediacentrePicker" on-close="display.courseMediacentrePicker = false">
+            <h2><i18n>edt.resources.add.mediacentre</i18n></h2>
+            <div class="row">
+                <input type="text" class="eight" ng-model="mediacentreQuery"
+                       ng-keydown="$event.keyCode === 13 && searchMediacentre(mediacentreQuery)"
+                       i18n-placeholder="edt.resources.mediacentre.search.placeholder"/>
+                <button type="button" ng-click="searchMediacentre(mediacentreQuery)">
+                    <i18n>edt.resources.mediacentre.search</i18n>
+                </button>
+            </div>
+            <p ng-if="mediacentreLoading"><i18n>edt.resources.mediacentre.loading</i18n></p>
+            <p ng-if="!mediacentreLoading && !mediacentreSearched && mediacentreResources.length === 0" class="info">
+                <i18n>edt.resources.mediacentre.empty</i18n>
+            </p>
+            <p ng-if="!mediacentreLoading && mediacentreSearched && mediacentreResources.length === 0" class="info">
+                <i18n>edt.resources.mediacentre.noresult</i18n>
+            </p>
+            <ul class="mediacentre-results" style="list-style:none; padding:0;">
+                <li ng-repeat="res in mediacentreResources" class="pointer"
+                    style="display:flex; align-items:center; gap:8px; padding:6px 0; cursor:pointer;"
+                    ng-click="addCourseMediacentreResource(res)">
+                    <img ng-if="res.image" ng-src="[[res.image]]" width="40" style="border-radius:2px;"/>
+                    <span>[[res.title]]</span>
+                </li>
+            </ul>
+            <div class="row">
+                <button type="button" class="cancel right-magnet" ng-click="display.courseMediacentrePicker = false">
+                    <i18n>edt.utils.cancel</i18n>
+                </button>
+            </div>
+        </lightbox>
+
         <!--SUBMIT/CANCEL BUTTONS-->
         <div class="right-magnet">
 
