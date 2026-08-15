@@ -1063,6 +1063,15 @@ export let main = ng.controller("EdtController", [
 
         $scope.course = new Course($scope.course);
         $scope.course.mapWithStructure(window.structure);
+        // La grille (worker de génération d'occurrences) ne renvoie pas les documents attachés :
+        // on recharge `resources` depuis le document complet en base pour (1) les afficher et
+        // (2) éviter de les écraser à l'enregistrement (sinon toJSON renverrait resources:[]).
+        try {
+          const fullCourse: any = await courseService.getCourse($scope.course._id);
+          $scope.course.resources = (fullCourse && fullCourse.resources) ? fullCourse.resources : [];
+        } catch (e) {
+          if (!$scope.course.resources) $scope.course.resources = [];
+        }
         $scope.initDateCreatCourse(params, $scope.course);
         if ($scope.course.is_recurrent && params.type !== "occurrence") {
           let recurrenceObject = $scope.course.recurrenceObject;

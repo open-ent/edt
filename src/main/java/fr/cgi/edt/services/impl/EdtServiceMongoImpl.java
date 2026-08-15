@@ -259,7 +259,8 @@ public class EdtServiceMongoImpl extends MongoDbCrudService implements EdtServic
                 .put("$gt", dateHelper.now());
     }
 
-    private void getCourse(String id, Handler<Either<String, JsonObject>> handler) {
+    @Override
+    public void getCourse(String id, Handler<Either<String, JsonObject>> handler) {
         JsonObject query = new JsonObject()
                 .put("_id", id);
 

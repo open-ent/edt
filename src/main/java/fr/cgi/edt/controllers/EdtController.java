@@ -338,6 +338,14 @@ public class EdtController extends MongoDbControllerHelper {
                 .onSuccess(result -> renderJson(request, result));
     }
 
+    @Get("/courses/:id")
+    @SecuredAction(value = "", type = ActionType.RESOURCE)
+    @ResourceFilter(ManageCourseWorkflowAction.class)
+    public void getCourse(HttpServerRequest request) {
+        String id = request.getParam(Field.ID);
+        edtService.getCourse(id, defaultResponseHandler(request));
+    }
+
     @Put("/courses/:id")
     @SecuredAction(value = "", type = ActionType.RESOURCE)
     @ResourceFilter(ManageCourseWorkflowAction.class)
