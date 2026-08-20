@@ -51,6 +51,9 @@ export class Course {
     // Documents attachés (espace documentaire + médiacentre). Persisté tel quel dans Mongo
     // (schemaless) ; le constructeur générique le relit, toJSON() le renvoie.
     resources: Array<any> = [];
+    // Ressources RBS (réservation de ressources) liées à ce cours — coexiste avec roomLabels
+    // (texte libre), ne le remplace pas.
+    rbsResourceIds: Array<number> = [];
 
     constructor(obj?: object) {
         if (obj && obj instanceof Object) {
@@ -163,7 +166,8 @@ export class Course {
             exceptionnal: (this.exceptionnal) ? this.exceptionnal : undefined,
             updated: moment(),
             lastUser: model.me.login,
-            resources: this.resources || []
+            resources: this.resources || [],
+            rbsResourceIds: this.rbsResourceIds || []
         };
 
         if (!this.structureId && this.structure && this.structure.id) {

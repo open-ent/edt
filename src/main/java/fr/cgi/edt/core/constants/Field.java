@@ -97,6 +97,10 @@ public class Field {
 
     // RBS bridge
     public static final String RBS_RESOURCE_IDS = "rbsResourceIds";
+    // Ids des réservations RBS effectivement créées pour rbsResourceIds — capturés depuis la
+    // réponse de "save-bookings" (RbsBridgeService), nécessaires pour pouvoir les supprimer
+    // plus tard ("delete-bookings" prend des ids de réservation, pas de ressource).
+    public static final String RBS_BOOKING_IDS = "rbsBookingIds";
 
     private Field() {
         throw new IllegalStateException("Utility class");

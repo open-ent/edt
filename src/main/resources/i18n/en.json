@@ -155,6 +155,8 @@
   "edt.utils.no": "No",
   "edt.utils.ok": "Ok",
   "edt.utils.room": "Room",
+  "edt.utils.rbs.resource": "RBS resource",
+  "edt.utils.rbs.resource.choose": "Choose a resource…",
   "edt.utils.save": "Save",
   "edt.utils.start.time": "Start time",
   "edt.utils.type": "type",

@@ -151,18 +151,41 @@ public class EdtController extends MongoDbControllerHelper {
     @ApiDoc("Update course")
     public void update(final HttpServerRequest request) {
         RequestUtils.bodyToJsonArray(request, body ->
-            UserUtils.getUserInfos(eb, request, user ->
-                edtService.update(body, result -> {
-                    if (result.isRight()) {
-                        renderJson(request, result.right().getValue());
-                        RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
-                        if (notifyService != null && body != null && !body.isEmpty())
-                            notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "updated");
-                    } else {
-                        renderError(request);
-                    }
-                })
-            )
+            UserUtils.getUserInfos(eb, request, user -> {
+                JsonArray courseIds = new JsonArray();
+                for (int i = 0; i < body.size(); i++) {
+                    String id = body.getJsonObject(i).getString(Field._ID);
+                    if (id != null) courseIds.add(id);
+                }
+                // Récupère les anciennes rbsBookingIds AVANT écrasement : elles seront supprimées
+                // après la mise à jour, remplacées par celles créées par le syncBookings suivant
+                // (stratégie simple "tout supprimer / tout recréer", pas de diff fin).
+                MongoDb.getInstance().find(fr.cgi.edt.Edt.EDT_COLLECTION,
+                    new JsonObject().put(Field._ID, new JsonObject().put("$in", courseIds)),
+                    oldCoursesMsg -> {
+                        JsonArray oldBookingIds = new JsonArray();
+                        if ("ok".equals(oldCoursesMsg.body().getString("status"))) {
+                            JsonArray oldCourses = oldCoursesMsg.body().getJsonArray("results", new JsonArray());
+                            for (int i = 0; i < oldCourses.size(); i++) {
+                                JsonArray ids = oldCourses.getJsonObject(i).getJsonArray(Field.RBS_BOOKING_IDS);
+                                if (ids != null) oldBookingIds.addAll(ids);
+                            }
+                        }
+
+                        edtService.update(body, result -> {
+                            if (result.isRight()) {
+                                renderJson(request, result.right().getValue());
+                                if (!oldBookingIds.isEmpty())
+                                    RbsBridgeService.deleteBookings(eb, oldBookingIds, user != null ? user.getUserId() : null);
+                                RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
+                                if (notifyService != null && body != null && !body.isEmpty())
+                                    notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "updated");
+                            } else {
+                                renderError(request);
+                            }
+                        });
+                    });
+            })
         );
     }
 
@@ -202,6 +225,17 @@ public class EdtController extends MongoDbControllerHelper {
         UserUtils.getUserInfos(eb, request, user -> userService.getChildrenInformation(user, arrayResponseHandler(request)));
     }
 
+    @Get("/structures/:id/rbs/resources")
+    @SecuredAction(value = "", type = ActionType.AUTHENTICATED)
+    @ApiDoc("Liste les types/ressources RBS d'une structure, sans exiger de droit RBS " +
+            "(relais serveur — n'importe quel enseignant doit pouvoir choisir une salle).")
+    public void getRbsResources(final HttpServerRequest request) {
+        String structureId = request.params().get("id");
+        RbsBridgeService.listResourcesForStructure(eb, structureId)
+                .onSuccess(res -> renderJson(request, res))
+                .onFailure(err -> renderError(request));
+    }
+
     @Delete("/course/:id")
     @SecuredAction(value = "", type = ActionType.RESOURCE)
     @Trace("DELETE_COURSE")
@@ -220,6 +254,9 @@ public class EdtController extends MongoDbControllerHelper {
                             renderJson(request, res.right().getValue());
                             if (notifyService != null && course != null)
                                 notifyService.notifyCourseChange(request, user, course, "deleted");
+                            JsonArray bookingIds = course != null ? course.getJsonArray(Field.RBS_BOOKING_IDS) : null;
+                            if (bookingIds != null && !bookingIds.isEmpty())
+                                RbsBridgeService.deleteBookings(eb, bookingIds, user != null ? user.getUserId() : null);
                         } else {
                             renderError(request);
                         }

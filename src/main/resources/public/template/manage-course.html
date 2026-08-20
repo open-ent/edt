@@ -217,6 +217,25 @@
                 </div>
             </div>
 
+            <!--RBS RESOURCE PICKER — coexiste avec la saisie libre ci-dessus, ne la remplace pas-->
+            <div ng-if="rbsResources.length > 0" class="row form-row remove-padding-bottom">
+                <label for="select-rbs-resource" class="cell two twelve-mobile">
+                    <i18n>edt.utils.rbs.resource</i18n>
+                </label>
+                <div class="cell twelve-mobile ten">
+                    <select id="select-rbs-resource" ng-model="selectedRbsResourceId"
+                            ng-change="addRbsResource()"
+                            ng-options="r.id as (r.typeName ? r.name + ' (' + r.typeName + ')' : r.name) for r in rbsResources">
+                        <option value="" selected><i18n>edt.utils.rbs.resource.choose</i18n></option>
+                    </select>
+                    <div class="select-blocks remove-margin-bottom">
+                        <div ng-repeat="rid in course.rbsResourceIds track by rid"
+                             ng-click="removeRbsResource(rid)">[[rbsResourceLabel(rid)]]
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div ng-if="course.is_recurrent" class="row form-row remove-padding">
                 <div class="cell twelve">
 

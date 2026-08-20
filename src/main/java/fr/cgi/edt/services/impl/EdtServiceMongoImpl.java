@@ -34,9 +34,9 @@ public class EdtServiceMongoImpl extends MongoDbCrudService implements EdtServic
 
     private static final Logger log = LoggerFactory.getLogger(EdtServiceMongoImpl.class);
     private static final Set<String> UPDATABLE_FIELDS = new HashSet<>(Arrays.asList(
-            "subjectId", "teacherIds", "tagIds", "classes", "classesExternalIds", 
-            "classesIds", "groups", "groupsExternalIds", "groupsIds", "roomLabels", "dayOfWeek", 
-            "manual", "theoretical", "exceptionnal"
+            "subjectId", "teacherIds", "tagIds", "classes", "classesExternalIds",
+            "classesIds", "groups", "groupsExternalIds", "groupsIds", "roomLabels", "dayOfWeek",
+            "manual", "theoretical", "exceptionnal", "rbsResourceIds"
     ));
     private final String collection;
     private final EventBus eb;

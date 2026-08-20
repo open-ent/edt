@@ -33,6 +33,7 @@ public class Course implements IModel<Course> {
     private String idStartSlot;
     private String idEndSlot;
     private List<Integer> rbsResourceIds;
+    private List<Integer> rbsBookingIds;
 
 
     public Course() {
@@ -63,6 +64,7 @@ public class Course implements IModel<Course> {
         this.idStartSlot = json.getString(Field.IDSTARTSLOT);
         this.idEndSlot = json.getString(Field.IDENDSLOT);
         this.rbsResourceIds = JsonHelper.jsonArrayToList(json.getJsonArray(Field.RBS_RESOURCE_IDS, new JsonArray()), Integer.class);
+        this.rbsBookingIds = JsonHelper.jsonArrayToList(json.getJsonArray(Field.RBS_BOOKING_IDS, new JsonArray()), Integer.class);
     }
 
     public String getId() {
@@ -269,6 +271,15 @@ public class Course implements IModel<Course> {
 
     public Course setRbsResourceIds(List<Integer> rbsResourceIds) {
         this.rbsResourceIds = rbsResourceIds;
+        return this;
+    }
+
+    public List<Integer> getRbsBookingIds() {
+        return rbsBookingIds;
+    }
+
+    public Course setRbsBookingIds(List<Integer> rbsBookingIds) {
+        this.rbsBookingIds = rbsBookingIds;
         return this;
     }
 

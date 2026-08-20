@@ -139,6 +139,58 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             Utils.safeApply($scope);
         };
 
+        // ============================================================================
+        // Ressources RBS (réservation de ressources) — salles/matériel, en plus du texte
+        // libre roomLabels existant (coexistence temporaire, aucune migration automatique).
+        // Relais serveur (/edt/structures/:id/rbs/resources), pas d'appel direct à l'API RBS :
+        // visible à n'importe quel enseignant même sans droit RBS individuel.
+        // ============================================================================
+        $scope.rbsResources = [];
+        if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
+        $scope.selectedRbsResourceId = null;
+
+        $scope.loadRbsResources = async function (): Promise<void> {
+            $scope.rbsResources = [];
+            if (!$scope.structure || !$scope.structure.id) { return; }
+            try {
+                const {data}: any = await http.get(`/edt/structures/${$scope.structure.id}/rbs/resources`);
+                const types: any[] = (data && data.types) || [];
+                const resources: any[] = (data && data.resources) || [];
+                const typeNameById: any = {};
+                types.forEach((t: any) => { typeNameById[t.id] = t.name; });
+                $scope.rbsResources = resources.map((r: any) => ({
+                    id: r.id,
+                    name: r.name,
+                    typeName: typeNameById[r.type_id] || ''
+                }));
+            } catch (e) {
+                $scope.rbsResources = [];
+            }
+            Utils.safeApply($scope);
+        };
+        $scope.loadRbsResources();
+
+        $scope.rbsResourceLabel = function (id: number): string {
+            const found: any = $scope.rbsResources.find((r: any) => r.id === id);
+            if (!found) { return String(id); }
+            return found.typeName ? `${found.name} (${found.typeName})` : found.name;
+        };
+
+        $scope.addRbsResource = function (): void {
+            const id: number = $scope.selectedRbsResourceId;
+            if (id === null || id === undefined) { return; }
+            if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
+            if ($scope.course.rbsResourceIds.indexOf(id) === -1) {
+                $scope.course.rbsResourceIds.push(id);
+            }
+            $scope.selectedRbsResourceId = null;
+        };
+
+        $scope.removeRbsResource = function (id: number): void {
+            if (!$scope.course.rbsResourceIds) { return; }
+            $scope.course.rbsResourceIds = $scope.course.rbsResourceIds.filter((rid: number) => rid !== id);
+        };
+
         $scope.setTimeSlot = (): void => {
             $scope.display.checkbox = true;
             let start: string = DateUtils.format($scope.course.startCourse, DATE_FORMAT['HOUR-MINUTES']);
@@ -172,6 +224,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             window.structure = structure;
             $scope.structure.id = structure.id;
             await $scope.syncStructure(structure);
+            await $scope.loadRbsResources();
             $scope.setTimeSlot();
         };
 
