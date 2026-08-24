@@ -147,7 +147,12 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         // ============================================================================
         $scope.rbsResources = [];
         if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
-        $scope.selectedRbsResourceId = null;
+        // Objet (et non une primitive) : le bloc contenant le <select> est sous ng-if, qui crée
+        // un scope enfant — un ng-model sur une primitive sans point s'y lierait à une propriété
+        // locale à ce scope enfant, jamais vue par addRbsResource() (défini sur le scope parent).
+        // Un objet se lit par référence à travers la chaîne de prototypes : la mutation reste
+        // visible partout.
+        $scope.rbsPicker = { selectedId: null };
 
         $scope.loadRbsResources = async function (): Promise<void> {
             $scope.rbsResources = [];
@@ -177,13 +182,13 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         };
 
         $scope.addRbsResource = function (): void {
-            const id: number = $scope.selectedRbsResourceId;
+            const id: number = $scope.rbsPicker.selectedId;
             if (id === null || id === undefined) { return; }
             if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
             if ($scope.course.rbsResourceIds.indexOf(id) === -1) {
                 $scope.course.rbsResourceIds.push(id);
             }
-            $scope.selectedRbsResourceId = null;
+            $scope.rbsPicker.selectedId = null;
         };
 
         $scope.removeRbsResource = function (id: number): void {

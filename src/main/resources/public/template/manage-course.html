@@ -224,7 +224,7 @@
                     <i18n>edt.utils.rbs.resource</i18n>
                 </label>
                 <div class="cell twelve-mobile ten">
-                    <select id="select-rbs-resource" ng-model="selectedRbsResourceId"
+                    <select id="select-rbs-resource" ng-model="rbsPicker.selectedId"
                             ng-change="addRbsResource()"
                             ng-options="r.id as (r.typeName ? r.name + ' (' + r.typeName + ')' : r.name) for r in rbsResources">
                         <option value="" selected><i18n>edt.utils.rbs.resource.choose</i18n></option>
