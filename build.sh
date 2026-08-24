@@ -40,7 +40,7 @@ esac
 done
 
 clean () {
-  docker-compose run --rm maven mvn $MVN_OPTS clean
+  docker compose run --rm maven mvn $MVN_OPTS clean
 }
 
 buildNode () {
@@ -63,14 +63,14 @@ buildNode () {
           if [ "$NO_DOCKER" = "true" ] ; then
             yarn install --no-bin-links && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build
           else
-            docker-compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --no-bin-links --legacy-peer-deps --force && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build"
+            docker compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --no-bin-links --legacy-peer-deps --force && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build"
           fi
           ;;
         *)
           if [ "$NO_DOCKER" = "true" ] ; then
             yarn install && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build
           else
-            docker-compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --legacy-peer-deps --force && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build"
+            docker compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --legacy-peer-deps --force && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build"
           fi
       esac
   else
@@ -80,25 +80,25 @@ buildNode () {
           if [ "$NO_DOCKER" = "true" ] ; then
             yarn install && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build
           else
-            docker-compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --no-bin-links --legacy-peer-deps --force && npm rm --no-save entcore && yarn install --no-save entcore@dev && node_modules/gulp/bin/gulp.js build"
+            docker compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --no-bin-links --legacy-peer-deps --force && npm rm --no-save entcore && yarn install --no-save entcore@dev && node_modules/gulp/bin/gulp.js build"
           fi
           ;;
         *)
           if [ "$NO_DOCKER" = "true" ] ; then
             yarn install --no-bin-links && yarn upgrade entcore && node_modules/gulp/bin/gulp.js build
           else
-            docker-compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --legacy-peer-deps --force && npm rm --no-save entcore && yarn install --no-save entcore@dev && node_modules/gulp/bin/gulp.js build"
+            docker compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --legacy-peer-deps --force && npm rm --no-save entcore && yarn install --no-save entcore@dev && node_modules/gulp/bin/gulp.js build"
           fi
       esac
   fi
 }
 
 install() {
-    docker-compose run --rm maven mvn $MVN_OPTS install -DskipTests
+    docker compose run --rm maven mvn $MVN_OPTS install -DskipTests
 }
 
 publish() {
-    version=`docker-compose run --rm maven mvn $MVN_OPTS help:evaluate -Dexpression=project.version -q -DforceStdout`
+    version=`docker compose run --rm maven mvn $MVN_OPTS help:evaluate -Dexpression=project.version -q -DforceStdout`
     level=`echo $version | cut -d'-' -f3`
 
     case "$level" in
@@ -110,7 +110,7 @@ publish() {
             ;;
     esac
 
-    docker-compose run --rm maven mvn -DrepositoryId=ode-$nexusRepository -DskiptTests -Dmaven.test.skip=true --settings /var/maven/.m2/settings.xml deploy
+    docker compose run --rm maven mvn -DrepositoryId=ode-$nexusRepository -DskiptTests -Dmaven.test.skip=true --settings /var/maven/.m2/settings.xml deploy
 }
 
 testNode () {
@@ -118,15 +118,15 @@ testNode () {
   rm -rf */build
   case `uname -s` in
     MINGW*)
-      docker-compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --no-bin-links && node_modules/gulp/bin/gulp.js drop-cache &&  npm test"
+      docker compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install --no-bin-links && node_modules/gulp/bin/gulp.js drop-cache &&  npm test"
       ;;
     *)
-      docker-compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install && node_modules/gulp/bin/gulp.js drop-cache && npm test"
+      docker compose run --rm -u "$USER_UID:$GROUP_GID" node sh -c "yarn install && node_modules/gulp/bin/gulp.js drop-cache && npm test"
   esac
 }
 
 test() {
-  docker-compose run --rm maven mvn $MVN_OPTS test
+  docker compose run --rm maven mvn $MVN_OPTS test
 }
 
 init() {
