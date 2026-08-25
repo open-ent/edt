@@ -76,6 +76,7 @@
   "edt.notify.exclusion.delete.err": "E006: Error deleting the exclusion",
   "edt.notify.exclusion.update.err": "E005: Error updating the exclusion",
   "edt.notify.modified": "The data has been modified",
+  "edt.notify.rbs.conflict": "The course was saved, but this resource could not be booked (already taken on this slot): ",
   "edt.notify.saved": "The data has been saved",
   "edt.notify.shared": "The data has been shared",
   "edt.notify.trashed": "The data has been moved to the bin",

@@ -18,6 +18,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Synchronise les réservations RBS quand EDT crée ou modifie un créneau
@@ -40,27 +43,48 @@ public class RbsBridgeService {
     }
 
     /**
-     * Fire-and-forget: builds RBS save-bookings messages for every course
-     * that carries rbsResourceIds and sends them on the event bus.
+     * Builds RBS save-bookings messages for every course that carries rbsResourceIds and sends
+     * them on the event bus. Contrairement à l'ancienne version fire-and-forget, attend la fin de
+     * tous les appels et renvoie la liste des cours ayant eu au moins une ressource refusée
+     * (conflit de créneau) — pour que le contrôleur puisse le signaler à l'enseignant au lieu
+     * d'échouer silencieusement.
      *
      * @param eb      Vert.x EventBus
      * @param courses array of EDT course JsonObjects (as received by create/update)
      * @param userId  OpenENT user ID that will own the bookings
+     * @return {@link Future<JsonArray>} tableau de {courseId, conflictResourceIds:[...]}, un
+     *         élément par cours ayant au moins une ressource non réservée.
      */
-    public static void syncBookings(EventBus eb, JsonArray courses, String userId) {
-        if (eb == null || courses == null || courses.isEmpty() || userId == null) return;
+    public static Future<JsonArray> syncBookings(EventBus eb, JsonArray courses, String userId) {
+        Promise<JsonArray> promise = Promise.promise();
+        JsonArray conflicts = new JsonArray();
 
-        for (int i = 0; i < courses.size(); i++) {
-            Object raw = courses.getValue(i);
-            if (!(raw instanceof JsonObject)) continue;
-            JsonObject course = (JsonObject) raw;
+        List<JsonObject> coursesToSync = new ArrayList<>();
+        if (eb != null && courses != null && userId != null) {
+            for (int i = 0; i < courses.size(); i++) {
+                Object raw = courses.getValue(i);
+                if (!(raw instanceof JsonObject)) continue;
+                JsonObject course = (JsonObject) raw;
+                JsonArray ids = course.getJsonArray(Field.RBS_RESOURCE_IDS, null);
+                if (ids != null && !ids.isEmpty()) coursesToSync.add(course);
+            }
+        }
+        if (coursesToSync.isEmpty()) {
+            promise.complete(conflicts);
+            return promise.future();
+        }
 
-            JsonArray rbsResourceIds = course.getJsonArray(Field.RBS_RESOURCE_IDS, null);
-            if (rbsResourceIds == null || rbsResourceIds.isEmpty()) continue;
+        AtomicInteger remaining = new AtomicInteger(coursesToSync.size());
+        Runnable checkDone = () -> {
+            if (remaining.decrementAndGet() == 0) promise.complete(conflicts);
+        };
 
+        for (JsonObject course : coursesToSync) {
+            JsonArray rbsResourceIds = course.getJsonArray(Field.RBS_RESOURCE_IDS);
+            String courseId = course.getString(Field._ID);
             String startStr = course.getString(Field.STARTDATE);
             String endStr   = course.getString(Field.ENDDATE);
-            if (startStr == null || endStr == null) continue;
+            if (startStr == null || endStr == null) { checkDone.run(); continue; }
 
             long startEpoch, endEpoch;
             try {
@@ -68,6 +92,7 @@ public class RbsBridgeService {
                 endEpoch   = parseEdtDate(endStr);
             } catch (DateTimeParseException e) {
                 log.warn("[EDT@RbsBridgeService] Cannot parse dates '" + startStr + "'/'" + endStr + "': " + e.getMessage());
+                checkDone.run();
                 continue;
             }
 
@@ -79,9 +104,11 @@ public class RbsBridgeService {
             );
 
             JsonArray bookings = new JsonArray();
+            JsonArray requestedResourceIds = new JsonArray();
             for (int j = 0; j < rbsResourceIds.size(); j++) {
                 Integer resourceId = rbsResourceIds.getInteger(j);
                 if (resourceId == null) continue;
+                requestedResourceIds.add(resourceId);
                 bookings.add(new JsonObject()
                         .put("resource",       new JsonObject().put("id", resourceId))
                         .put("slots",          slots)
@@ -90,32 +117,48 @@ public class RbsBridgeService {
                 );
             }
 
-            if (bookings.isEmpty()) continue;
+            if (bookings.isEmpty()) { checkDone.run(); continue; }
 
             JsonObject msg = new JsonObject()
                     .put("action",   "save-bookings")
                     .put("userId",   userId)
                     .put("bookings", bookings);
 
-            String courseId = course.getString(Field._ID);
             eb.request(RBS_BUS, msg, reply -> {
                 if (reply.failed()) {
                     log.error("[EDT@RbsBridgeService] RBS bus error for course " + courseId + ": " + reply.cause().getMessage());
+                    if (courseId != null) {
+                        conflicts.add(new JsonObject().put("courseId", courseId).put("conflictResourceIds", requestedResourceIds));
+                    }
+                    checkDone.run();
                     return;
                 }
                 log.info("[EDT@RbsBridgeService] RBS bookings synced for course " + courseId);
-                // La réponse "save-bookings" porte les réservations créées (avec leur id) — on
-                // les persiste sur le cours pour pouvoir les supprimer plus tard ("delete-
-                // bookings" prend des ids de réservation, jamais capturés sinon puisque cet
-                // appel était fire-and-forget).
-                if (courseId == null) return;
+                // La réponse "save-bookings" porte les réservations réellement créées (avec leur
+                // id ET leur resource_id) — on compare aux ressources demandées pour détecter les
+                // conflits (WHERE NOT EXISTS côté RBS, silencieux sinon), et on persiste les
+                // bookingIds obtenus pour pouvoir les supprimer plus tard ("delete-bookings").
                 JsonArray created = extractCreatedBookings((JsonObject) reply.result().body());
                 JsonArray bookingIds = new JsonArray();
+                JsonArray succeededResourceIds = new JsonArray();
                 for (int k = 0; k < created.size(); k++) {
-                    Integer bookingId = created.getJsonObject(k).getInteger("id");
+                    JsonObject b = created.getJsonObject(k);
+                    Integer bookingId = b.getInteger("id");
                     if (bookingId != null) bookingIds.add(bookingId);
+                    Integer rid = b.getInteger("resource_id");
+                    if (rid != null) succeededResourceIds.add(rid);
                 }
-                if (bookingIds.isEmpty()) return;
+
+                JsonArray conflictResourceIds = new JsonArray();
+                for (int j = 0; j < requestedResourceIds.size(); j++) {
+                    Integer rid = requestedResourceIds.getInteger(j);
+                    if (!succeededResourceIds.contains(rid)) conflictResourceIds.add(rid);
+                }
+                if (!conflictResourceIds.isEmpty() && courseId != null) {
+                    conflicts.add(new JsonObject().put("courseId", courseId).put("conflictResourceIds", conflictResourceIds));
+                }
+
+                if (courseId == null || bookingIds.isEmpty()) { checkDone.run(); return; }
 
                 MongoUpdateBuilder update = new MongoUpdateBuilder();
                 update.set(Field.RBS_BOOKING_IDS, bookingIds);
@@ -124,9 +167,12 @@ public class RbsBridgeService {
                             if (!"ok".equals(res.body().getString("status"))) {
                                 log.error("[EDT@RbsBridgeService] Failed to persist rbsBookingIds on course " + courseId);
                             }
+                            checkDone.run();
                         });
             });
         }
+
+        return promise.future();
     }
 
     /**

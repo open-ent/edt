@@ -1,4 +1,4 @@
-import {_, moment, ng, idiom as lang} from 'entcore';
+import {_, moment, ng, idiom as lang, notify} from 'entcore';
 import http from 'axios';
 import {COMBO_LABELS, Course, CourseOccurrence, DAYS_OF_WEEK, Group,
         Structure, Subject, Subjects, Teacher, Utils} from '../model';
@@ -590,7 +590,37 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
          * @param {Course} course course to save
          * @returns {Promise<void>} Returns a promise
          */
+        // Avertit l'enseignant quand une ressource RBS demandée n'a pas pu être réservée (créneau
+        // déjà pris) — jusqu'ici cet échec restait entièrement silencieux (fire-and-forget côté
+        // serveur, seulement loggé). Le cours lui-même est toujours enregistré normalement.
+        const notifyRbsConflicts = (result: any): void => {
+            if (!result || !result.rbsConflicts || !result.rbsConflicts.length) return;
+            const resourceIds: number[] = _.uniq(
+                result.rbsConflicts.reduce((acc: number[], c: any) => acc.concat(c.conflictResourceIds || []), [])
+            );
+            const names = resourceIds.map((rid: number) => $scope.rbsResourceLabel(rid)).join(', ');
+            notify.error(lang.translate('edt.notify.rbs.conflict') + names);
+        };
+
+        // Empêche le double-clic pendant l'enregistrement : le bouton n'était désactivé que par
+        // isValidForm() (statique), pas par l'état "en cours d'enregistrement" — chaque clic
+        // pendant l'attente de la réponse serveur relançait saveCourse() et créait un nouveau
+        // cours en double (silencieusement, puisque rien à l'écran n'indiquait qu'un enregistrement
+        // était déjà en cours).
+        $scope.saving = false;
+
         $scope.saveCourse = async (course: Course): Promise<void> => {
+            if ($scope.saving) return;
+            $scope.saving = true;
+
+            try {
+                await $scope.doSaveCourse(course);
+            } finally {
+                $scope.saving = false;
+            }
+        };
+
+        $scope.doSaveCourse = async (course: Course): Promise<void> => {
 
             if (course.courseOccurrences && course.courseOccurrences.length === 0) {
                 $scope.submit_CourseOccurrence_Form();
@@ -616,17 +646,19 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
                 course.syncCourseWithOccurrence($scope.courseOccurrenceForm);
                 delete course.recurrence;
                 setDatesFromTimeslots(course);
-                await course.update();
+                notifyRbsConflicts(await course.update());
             } else if ($scope.isUpdateRecurrence()) {
                 course.syncCourseWithOccurrence($scope.courseOccurrenceForm);
                 course.newRecurrence = Utils.uuid();
-                await course.update();
+                notifyRbsConflicts(await course.update());
             } else if (course.is_recurrent) {
+                // Cas récurrent (plusieurs occurrences envoyées ensemble via Courses.save()) :
+                // rbsConflicts pas encore remonté pour ce chemin, seulement pour un cours simple.
                 let courses = course.getCourseForEachOccurrence();
                 await courses.save();
             } else {
                 setDatesFromTimeslots(course);
-                await course.save();
+                notifyRbsConflicts(await course.save());
             }
             delete $scope.course;
             $scope.goTo('/');

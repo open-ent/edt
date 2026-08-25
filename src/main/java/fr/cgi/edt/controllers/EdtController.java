@@ -132,10 +132,18 @@ public class EdtController extends MongoDbControllerHelper {
             UserUtils.getUserInfos(eb, request, user ->
                 edtService.create(body, result -> {
                     if (result.isRight()) {
-                        renderJson(request, result.right().getValue());
-                        RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
-                        if (notifyService != null && body != null && !body.isEmpty())
-                            notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "created");
+                        JsonObject responseBody = result.right().getValue();
+                        if (user != null) {
+                            RbsBridgeService.syncBookings(eb, body, user.getUserId()).onComplete(ar -> {
+                                JsonArray rbsConflicts = ar.succeeded() ? ar.result() : new JsonArray();
+                                if (!rbsConflicts.isEmpty()) responseBody.put("rbsConflicts", rbsConflicts);
+                                renderJson(request, responseBody);
+                                if (notifyService != null && !body.isEmpty())
+                                    notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "created");
+                            });
+                        } else {
+                            renderJson(request, responseBody);
+                        }
                     } else {
                         renderError(request);
                     }
@@ -174,12 +182,20 @@ public class EdtController extends MongoDbControllerHelper {
 
                         edtService.update(body, result -> {
                             if (result.isRight()) {
-                                renderJson(request, result.right().getValue());
+                                JsonObject responseBody = result.right().getValue();
                                 if (!oldBookingIds.isEmpty())
                                     RbsBridgeService.deleteBookings(eb, oldBookingIds, user != null ? user.getUserId() : null);
-                                RbsBridgeService.syncBookings(eb, body, user != null ? user.getUserId() : null);
-                                if (notifyService != null && body != null && !body.isEmpty())
-                                    notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "updated");
+                                if (user != null) {
+                                    RbsBridgeService.syncBookings(eb, body, user.getUserId()).onComplete(ar -> {
+                                        JsonArray rbsConflicts = ar.succeeded() ? ar.result() : new JsonArray();
+                                        if (!rbsConflicts.isEmpty()) responseBody.put("rbsConflicts", rbsConflicts);
+                                        renderJson(request, responseBody);
+                                        if (notifyService != null && !body.isEmpty())
+                                            notifyService.notifyCourseChange(request, user, body.getJsonObject(0), "updated");
+                                    });
+                                } else {
+                                    renderJson(request, responseBody);
+                                }
                             } else {
                                 renderError(request);
                             }

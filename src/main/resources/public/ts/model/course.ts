@@ -64,26 +64,28 @@ export class Course {
         }
     }
 
-    async save() {
-        if (this._id) await this.update();
-        else await this.create();
-
+    // Retourne la réponse serveur (peut porter `rbsConflicts` : ressources RBS demandées mais non
+    // réservées, cf edt.notify.rbs.conflict côté manageCourse.ts) au lieu de void, pour que
+    // l'appelant puisse prévenir l'enseignant plutôt que d'échouer silencieusement.
+    async save(): Promise<any> {
+        if (this._id) return await this.update();
+        else return await this.create();
     }
 
-    async update() {
+    async update(): Promise<any> {
         try {
             let url = `/edt/courses/${this.recurrence ? `recurrences/${this.recurrence}` : this._id}`;
-            await http.put(url, this.toJSON());
-            return;
+            const {data} = await http.put(url, this.toJSON());
+            return data;
         } catch (e) {
             notify.error('edt.notify.update.err');
         }
     }
 
-    async create() {
+    async create(): Promise<any> {
         try {
-            await http.post('/edt/course', [this.toJSON()]);
-            return;
+            const {data} = await http.post('/edt/course', [this.toJSON()]);
+            return data;
         } catch (e) {
             notify.error('edt.notify.create.err');
             console.error(e);

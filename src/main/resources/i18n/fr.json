@@ -76,6 +76,7 @@
   "edt.notify.exclusion.delete.err": "E006 : Erreur lors de la suppression de l'exclusion",
   "edt.notify.exclusion.update.err": "E005 : Erreur lors de la mise à jour de l'exclusion",
   "edt.notify.modified": "La donnée a été modifiée",
+  "edt.notify.rbs.conflict": "Le cours est enregistré, mais cette ressource n'a pas pu être réservée (déjà prise sur ce créneau) : ",
   "edt.notify.saved": "La donnée a été sauvegardée",
   "edt.notify.shared": "La donnée a été partagée",
   "edt.notify.trashed": "La donnée a été mise à la corbeille",
