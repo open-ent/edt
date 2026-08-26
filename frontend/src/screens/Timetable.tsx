@@ -1,7 +1,8 @@
 import { useEdificeClient } from '@open-ent/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import { api, Course, Klass } from '../api';
 import { addDays, courseSortKey, dayLabel, hhmm, mondayOf, weekLabel, ymd } from '../utils';
@@ -21,8 +22,20 @@ export function Timetable() {
   const qc = useQueryClient();
   const structureId = user?.structures?.[0] ?? '';
 
+  // Lien profond depuis le dashboard (widget "prochain cours") : #/?date=YYYY-MM-DD&start=HH:MM
+  // ouvre directement la bonne semaine et met en évidence le créneau visé.
+  const [searchParams] = useSearchParams();
+  const targetDate = searchParams.get('date');
+  const targetStart = searchParams.get('start');
+
   const [classId, setClassId] = useState('');
-  const [monday, setMonday] = useState(() => mondayOf(new Date()));
+  const [monday, setMonday] = useState(() => {
+    if (targetDate) {
+      const d = new Date(`${targetDate}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) return mondayOf(d);
+    }
+    return mondayOf(new Date());
+  });
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
   const classesQuery = useQuery({ queryKey: ['edt', 'classes', structureId], queryFn: () => api.getClasses(structureId), enabled: !!structureId });
@@ -83,6 +96,15 @@ export function Timetable() {
   });
 
   const courses = [...(coursesQuery.data ?? [])].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
+
+  // Cours ciblé par le lien profond (date + heure de début).
+  const highlightCourse = targetDate && targetStart
+    ? courses.find((c) => (c.startDate || '').slice(0, 10) === targetDate && (c.startDate || '').slice(11, 16) === targetStart)
+    : undefined;
+  const highlightRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (highlightCourse) highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightCourse]);
 
   // Indexation des cours par (créneau de début, jour de la semaine) pour la grille.
   // Les cours créés manuellement n'ont pas d'idStartSlot : le créneau est alors résolu
@@ -238,10 +260,20 @@ export function Timetable() {
                   </th>
                   {JOURS.map((j) => {
                     const c = byCell.get(`${s.id}|${j.dow}`);
+                    const isHighlighted = !!c && c === highlightCourse;
                     return (
                       <td key={j.dow} style={{ verticalAlign: 'top' }}>
                         {c && (
-                          <div style={{ background: '#e8f4fa', borderLeft: '3px solid #4bafd5', borderRadius: 3, padding: '4px 6px' }}>
+                          <div
+                            ref={isHighlighted ? (el) => { highlightRef.current = el; } : undefined}
+                            style={{
+                              background: isHighlighted ? '#fff3cd' : '#e8f4fa',
+                              borderLeft: `3px solid ${isHighlighted ? '#e0a800' : '#4bafd5'}`,
+                              borderRadius: 3,
+                              padding: '4px 6px',
+                              ...(isHighlighted && { boxShadow: '0 0 0 2px #e0a800' }),
+                            }}
+                          >
                             <div style={{ fontWeight: 600, fontSize: 13 }}>{courseTitle(c)}</div>
                             {(c.roomLabels ?? []).length > 0 && <div className="text-muted" style={{ fontSize: 12 }}>{(c.roomLabels ?? []).join(', ')}</div>}
                           </div>
@@ -271,14 +303,21 @@ export function Timetable() {
             </tr>
           </thead>
           <tbody>
-            {courses.map((c) => (
-              <tr key={c._id}>
-                <td>{dayLabel(c.startDate)}</td>
-                <td>{hhmm(c.startDate)} – {hhmm(c.endDate)}</td>
-                <td>{courseTitle(c)}</td>
-                <td>{(c.roomLabels ?? []).join(', ')}</td>
-              </tr>
-            ))}
+            {courses.map((c) => {
+              const isHighlighted = c === highlightCourse;
+              return (
+                <tr
+                  key={c._id}
+                  ref={isHighlighted ? (el) => { highlightRef.current = el; } : undefined}
+                  style={isHighlighted ? { background: '#fff3cd', boxShadow: 'inset 0 0 0 2px #e0a800' } : undefined}
+                >
+                  <td>{dayLabel(c.startDate)}</td>
+                  <td>{hhmm(c.startDate)} – {hhmm(c.endDate)}</td>
+                  <td>{courseTitle(c)}</td>
+                  <td>{(c.roomLabels ?? []).join(', ')}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
