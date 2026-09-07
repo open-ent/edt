@@ -149,6 +149,7 @@
   "edt.utils.delete": "Supprimer",
   "edt.utils.delete.selected": "Supprimer les cours sélectionnés",
   "edt.utils.deselect.all": "Tout désélectionner",
+  "edt.utils.select.all": "Tout sélectionner",
   "edt.utils.display_mode": "Mode d'affichage",
   "edt.utils.end.time": "Heure de fin",
   "edt.utils.modify": "Modifier",

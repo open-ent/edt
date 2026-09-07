@@ -149,6 +149,7 @@
   "edt.utils.delete": "Delete",
   "edt.utils.delete.selected": "Delete selected lessons",
   "edt.utils.deselect.all": "Deselect all",
+  "edt.utils.select.all": "Select all",
   "edt.utils.display_mode": "Display mode",
   "edt.utils.end.time": "End time",
   "edt.utils.modify": "Edit",

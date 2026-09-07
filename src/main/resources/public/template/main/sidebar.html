@@ -32,7 +32,11 @@
                 ng-class="(params.user.length > 0) ? 'half' : 'full'">
                 <span class="sidebar-header">[[translate('utils.groups') | uppercase]]</span>
                 <div class="row display-inline-block" id="select-all-groups">
-                    <button ng-disabled="!(params.group.length > 0)" class="twelve padding-sm deselect-button"
+                    <button ng-disabled="!(structure.groups.all.length > params.group.length)" class="six padding-sm select-button"
+                            ng-click="selectAllFilters()">
+                        <i18n>edt.utils.select.all</i18n>
+                    </button>
+                    <button ng-disabled="!(params.group.length > 0)" class="six padding-sm deselect-button"
                             ng-click="deselectAllFilters()">
                         <i18n>edt.utils.deselect.all</i18n>
                     </button>

@@ -860,6 +860,14 @@ export let main = ng.controller("EdtController", [
       $scope.updateDatas();
     };
 
+    /**
+     * Select every available group/class filter
+     */
+    $scope.selectAllFilters = (): void => {
+      $scope.params.group = angular.copy($scope.structure.groups.all);
+      $scope.updateDatas();
+    };
+
     $scope.getMomentFromDate = function (date, time) {
       return moment([
         date.getFullYear(),
