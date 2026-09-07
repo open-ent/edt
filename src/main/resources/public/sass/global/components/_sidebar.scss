@@ -74,13 +74,13 @@
     #select-all-groups {
       height: 30px;
       margin-left: 10px;
+      display: flex;
+      gap: 5px;
+
+      .deselect-button {
+        flex: 1;
+      }
     }
-  }
-
-
-  .toggle-all-button {
-    width: fit-content;
-    border-radius: 5px;
   }
 
   .edt-filters {
