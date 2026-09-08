@@ -42,7 +42,7 @@ jobs:
       # [B] IHM React (vue *-react.html -> /<module>/public/index.js) : sous-projet Vite
       # frontend/ (Node 20), paquets prives @open-ent -> auth OPENENT_PACKAGES_TOKEN. La copie
       # dans resources/public est embarquee par l'upload frontend-assets ci-dessous (fat-mod complet).
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
       - uses: pnpm/action-setup@v4
