@@ -23,3 +23,20 @@ coverage/
 .env
 target
 dependency-reduced-pom.xml
+
+# Sortie du build frontend/ (Vite/pnpm), copiee dans public/ uniquement
+# a l'etape CI (build-and-publish.yml), jamais commitee (regeneree a chaque build).
+/src/main/resources/public/index.js
+/src/main/resources/public/index.css
+/src/main/resources/public/*-[A-Za-z0-9_]*.png
+/src/main/resources/public/*-[A-Za-z0-9_]*.jpg
+/src/main/resources/public/*-[A-Za-z0-9_]*.jpeg
+/src/main/resources/public/*-[A-Za-z0-9_]*.gif
+/src/main/resources/public/*-[A-Za-z0-9_]*.svg
+/src/main/resources/public/*-[A-Za-z0-9_]*.woff
+/src/main/resources/public/*-[A-Za-z0-9_]*.woff2
+/src/main/resources/public/*-[A-Za-z0-9_]*.ttf
+
+# Lockfile errone : le module utilise npm en racine (package-lock.json)
+# et pnpm dans frontend/ (pnpm-lock.yaml) — jamais yarn.
+/yarn.lock

@@ -234,6 +234,11 @@
                              ng-click="removeRbsResource(rid)">[[rbsResourceLabel(rid)]]
                         </div>
                     </div>
+                    <!--Avertissement non bloquant : catégorie de la salle choisie ne correspond pas
+                        à la catégorie attendue pour la matière. N'empêche jamais l'enregistrement.-->
+                    <div class="warning" ng-if="rbsRoomCategoryWarning()">
+                        [[rbsRoomCategoryWarning()]]
+                    </div>
                 </div>
             </div>
 

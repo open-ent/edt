@@ -145,6 +145,59 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         // Relais serveur (/edt/structures/:id/rbs/resources), pas d'appel direct à l'API RBS :
         // visible à n'importe quel enseignant même sans droit RBS individuel.
         // ============================================================================
+        // --- Avertissement de catégorie de salle (RBS resource_type.category, texte libre) ---
+        // Association matière → catégorie attendue : PAS d'API accessible depuis EDT qui expose
+        // celle de school-planner (sp_room_category_ref/override, exposée en interne via
+        // GET /school-planner/api/room-category/{structureId}) — ce service tourne sur son propre
+        // port/process (Quarkus), pas de passerelle bus/HTTP établie vers EDT comme pour RBS
+        // (RbsBridgeService), et un appel cross-origin direct depuis ce frontend dépendrait d'une
+        // session/CORS non garantis, pour un simple avertissement non bloquant. Choix : dupliquer
+        // ici un sous-ensemble minimal, en dur, de la même heuristique que
+        // school-planner/CurriculumService.ALIASES + le seed de sp_room_category_ref
+        // (V6__room_category.sql, V7__split_labo_category.sql pour la scission physique-chimie/SVT)
+        // — approximation par sous-chaîne assumée (c'est un avertissement, pas une contrainte), à
+        // tenir manuellement à jour si le seed évolue côté school-planner.
+        const SUBJECT_ROOM_CATEGORY_ALIASES: { category: string, aliases: string[] }[] = [
+            { category: 'GYMNASE', aliases: ['sportive', 'e.p.s', 'eps', 'education physique'] },
+            { category: 'LABO_PHYSIQUE_CHIMIE', aliases: ['physique', 'chimie'] },
+            { category: 'LABO_SVT', aliases: ['vie de la terre', 'svt', 's.v.t', 'sciences de la vie'] },
+            { category: 'TECHNO', aliases: ['techno'] },
+            { category: 'MUSIQUE', aliases: ['musi'] },
+            { category: 'ARTS', aliases: ['arts plas', 'plastique'] }
+        ];
+
+        const foldText = (s: string): string => {
+            return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        };
+
+        const getRequiredRoomCategory = (subjectLabel: string): string => {
+            const folded: string = foldText(subjectLabel);
+            const match = SUBJECT_ROOM_CATEGORY_ALIASES.find((entry) =>
+                entry.aliases.some((alias: string) => folded.indexOf(alias) !== -1));
+            return match ? match.category : null;
+        };
+
+        // Message vide (pas de warning) si : matière exceptionnelle/non choisie, matière sans
+        // catégorie attendue connue, aucune salle RBS choisie, ou salle sans catégorie /
+        // catégorie GENERAL — silence total dans tous ces cas, jamais bloquant pour l'enregistrement.
+        $scope.rbsRoomCategoryWarning = (): string => {
+            if ($scope.isExceptionalSubject() || !$scope.course.subjectId) { return ''; }
+            if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return ''; }
+            const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
+            if (!subject) { return ''; }
+            const requiredCategory: string = getRequiredRoomCategory(subject.subjectLabel);
+            if (!requiredCategory) { return ''; }
+
+            const mismatched: any[] = $scope.course.rbsResourceIds
+                .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
+                .filter((r: any) => r && r.typeCategory && r.typeCategory !== 'GENERAL' && r.typeCategory !== requiredCategory);
+            if (!mismatched.length) { return ''; }
+
+            const names: string = mismatched.map((r: any) => r.name).join(', ');
+            return names + ' ' + lang.translate('edt.rbs.category.mismatch.notcategory') + ' ' + requiredCategory
+                + ' ' + lang.translate('edt.rbs.category.mismatch.expectedfor') + ' ' + subject.subjectLabel;
+        };
+
         $scope.rbsResources = [];
         if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
         // Objet (et non une primitive) : le bloc contenant le <select> est sous ng-if, qui crée
@@ -162,11 +215,19 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
                 const types: any[] = (data && data.types) || [];
                 const resources: any[] = (data && data.resources) || [];
                 const typeNameById: any = {};
-                types.forEach((t: any) => { typeNameById[t.id] = t.name; });
+                const typeCategoryById: any = {};
+                types.forEach((t: any) => {
+                    typeNameById[t.id] = t.name;
+                    // t.category = colonne rbs.resource_type.category (texte libre), déjà remontée
+                    // ici via le relais serveur (RbsBridgeService -> "SELECT t.*"), pas besoin d'un
+                    // second appel dédié.
+                    typeCategoryById[t.id] = (t.category || '').toUpperCase().trim();
+                });
                 $scope.rbsResources = resources.map((r: any) => ({
                     id: r.id,
                     name: r.name,
-                    typeName: typeNameById[r.type_id] || ''
+                    typeName: typeNameById[r.type_id] || '',
+                    typeCategory: typeCategoryById[r.type_id] || ''
                 }));
             } catch (e) {
                 $scope.rbsResources = [];
