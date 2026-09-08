@@ -118,7 +118,7 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
 
       - name: Download frontend assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-assets
           path: src/main/resources/
