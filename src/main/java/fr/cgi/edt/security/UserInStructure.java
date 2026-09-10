@@ -10,6 +10,6 @@ public class UserInStructure implements ResourcesProvider {
     @Override
     public void authorize(HttpServerRequest request, Binding binding, UserInfos user, Handler<Boolean> handler) {
         String structureId = request.getParam("id");
-        handler.handle(user.getStructures().contains(structureId));
+        handler.handle(user.isADMC() || user.getStructures().contains(structureId));
     }
 }
