@@ -13,6 +13,7 @@ import fr.cgi.edt.services.UserService;
 import fr.cgi.edt.services.impl.EdtNotifyService;
 import fr.cgi.edt.services.impl.EdtServiceMongoImpl;
 import fr.cgi.edt.services.impl.RbsBridgeService;
+import fr.cgi.edt.services.impl.RoomCategoryBridgeService;
 import fr.cgi.edt.services.impl.StructureServiceNeo4jImpl;
 import fr.cgi.edt.services.impl.StsServiceMongoImpl;
 import fr.cgi.edt.services.impl.UserServiceNeo4jImpl;
@@ -250,6 +251,22 @@ public class EdtController extends MongoDbControllerHelper {
         RbsBridgeService.listResourcesForStructure(eb, structureId)
                 .onSuccess(res -> renderJson(request, res))
                 .onFailure(err -> renderError(request));
+    }
+
+    @Get("/structures/:id/room-category")
+    @SecuredAction(value = "", type = ActionType.AUTHENTICATED)
+    @ApiDoc("Relais vers school-planner : résout la catégorie de salle requise pour une matière " +
+            "(subjectName/subjectCode en query), pour la mettre en avant en saisie manuelle de " +
+            "salle — même logique que le solveur, pas de duplication de l'heuristique côté front.")
+    public void getRoomCategory(final HttpServerRequest request) {
+        String structureId = request.params().get("id");
+        String subjectName = request.params().get("subjectName");
+        String subjectCode = request.params().get("subjectCode");
+        String schoolPlannerUrl = config.getString(Field.SCHOOL_PLANNER_URL, "http://localhost:8084");
+        String cookieHeader = request.getHeader("Cookie");
+        RoomCategoryBridgeService.resolveCategoryForSubject(vertx, schoolPlannerUrl, structureId, subjectName, subjectCode, cookieHeader)
+                .onSuccess(res -> renderJson(request, res))
+                .onFailure(err -> renderJson(request, new JsonObject().putNull("category")));
     }
 
     @Delete("/course/:id")

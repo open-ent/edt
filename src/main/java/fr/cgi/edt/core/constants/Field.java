@@ -42,6 +42,7 @@ public class Field {
     public static final String RECORDS = "records";
     public static final String POPULATION = "population";
     public static final String HOLIDAYS = "holidays";
+    public static final String SCHOOL_PLANNER_URL = "school-planner-url";
     public static final String STATUS = "status";
     public static final String ERROR = "error";
     public static final String MESSAGE = "message";

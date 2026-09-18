@@ -170,8 +170,38 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
         };
 
-        const getRequiredRoomCategory = (subjectLabel: string): string => {
-            const folded: string = foldText(subjectLabel);
+        // Cache par subjectId de la résolution serveur (relais /edt/structures/:id/room-category
+        // -> school-planner, même logique que le solveur). Rempli de façon asynchrone (fire-and-
+        // forget) par getRequiredRoomCategory() elle-même : le premier appel pour une matière
+        // renvoie encore le repli en dur, le digest suivant utilisera la vraie valeur une fois
+        // la réponse arrivée — pas de blocage, jamais d'échec bloquant si school-planner est
+        // indisponible (repli silencieux sur l'heuristique locale).
+        const serverRoomCategoryCache: { [subjectId: string]: string } = {};
+
+        const loadRequiredRoomCategoryFromServer = async (subject: any): Promise<void> => {
+            if (!$scope.structure || !$scope.structure.id || !subject || serverRoomCategoryCache[subject.subjectId] !== undefined) {
+                return;
+            }
+            try {
+                const params = 'subjectName=' + encodeURIComponent(subject.subjectLabel || '')
+                    + '&subjectCode=' + encodeURIComponent(subject.subjectCode || '');
+                const {data}: any = await http.get(`/edt/structures/${$scope.structure.id}/room-category?${params}`);
+                serverRoomCategoryCache[subject.subjectId] = (data && data.category) || null;
+                Utils.safeApply($scope);
+            } catch (e) {
+                serverRoomCategoryCache[subject.subjectId] = null;
+            }
+        };
+
+        const getRequiredRoomCategory = (subject: any): string => {
+            if (!subject) { return null; }
+            const cached: string = serverRoomCategoryCache[subject.subjectId];
+            if (cached !== undefined) {
+                if (cached) { return cached; }
+            } else {
+                loadRequiredRoomCategoryFromServer(subject);
+            }
+            const folded: string = foldText(subject.subjectLabel);
             const match = SUBJECT_ROOM_CATEGORY_ALIASES.find((entry) =>
                 entry.aliases.some((alias: string) => folded.indexOf(alias) !== -1));
             return match ? match.category : null;
@@ -185,7 +215,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return ''; }
             const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
             if (!subject) { return ''; }
-            const requiredCategory: string = getRequiredRoomCategory(subject.subjectLabel);
+            const requiredCategory: string = getRequiredRoomCategory(subject);
             if (!requiredCategory) { return ''; }
 
             const mismatched: any[] = $scope.course.rbsResourceIds
