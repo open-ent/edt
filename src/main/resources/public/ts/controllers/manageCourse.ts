@@ -207,6 +207,17 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             return match ? match.category : null;
         };
 
+        // Comparaison tolérante au préfixe : une catégorie RBS générique ("LABO") doit être
+        // considérée compatible même si la catégorie requise est plus fine
+        // ("LABO_PHYSIQUE_CHIMIE") — un établissement peut ne pas avoir configuré ce niveau de
+        // détail dans ses types RBS.
+        const categoryMatches = (typeCategory: string, requiredCategory: string): boolean => {
+            if (!typeCategory) { return false; }
+            return typeCategory === requiredCategory
+                || requiredCategory.indexOf(typeCategory + '_') === 0
+                || typeCategory.indexOf(requiredCategory + '_') === 0;
+        };
+
         // Message vide (pas de warning) si : matière exceptionnelle/non choisie, matière sans
         // catégorie attendue connue, aucune salle RBS choisie, ou salle sans catégorie /
         // catégorie GENERAL — silence total dans tous ces cas, jamais bloquant pour l'enregistrement.
@@ -220,7 +231,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
 
             const mismatched: any[] = $scope.course.rbsResourceIds
                 .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
-                .filter((r: any) => r && r.typeCategory && r.typeCategory !== 'GENERAL' && r.typeCategory !== requiredCategory);
+                .filter((r: any) => r && r.typeCategory && r.typeCategory !== 'GENERAL' && !categoryMatches(r.typeCategory, requiredCategory));
             if (!mismatched.length) { return ''; }
 
             const names: string = mismatched.map((r: any) => r.name).join(', ');
@@ -265,6 +276,22 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             Utils.safeApply($scope);
         };
         $scope.loadRbsResources();
+
+        // Priorise dans le sélecteur les salles de la catégorie requise pour la matière du cours,
+        // sans jamais masquer les autres (dégradation gracieuse si la détection de catégorie se
+        // trompe, ou si la structure n'a pas de salle de cette catégorie) — complète
+        // rbsRoomCategoryWarning(), qui n'avertit qu'une fois une salle déjà choisie.
+        $scope.getSortedRbsResources = (): any[] => {
+            if (!$scope.course.subjectId) { return $scope.rbsResources; }
+            const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
+            const requiredCategory: string = subject ? getRequiredRoomCategory(subject) : null;
+            if (!requiredCategory) { return $scope.rbsResources; }
+            return [...$scope.rbsResources].sort((a: any, b: any) => {
+                const aMatch: number = categoryMatches(a.typeCategory, requiredCategory) ? 0 : 1;
+                const bMatch: number = categoryMatches(b.typeCategory, requiredCategory) ? 0 : 1;
+                return aMatch - bMatch;
+            });
+        };
 
         $scope.rbsResourceLabel = function (id: number): string {
             const found: any = $scope.rbsResources.find((r: any) => r.id === id);

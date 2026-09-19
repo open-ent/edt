@@ -14,6 +14,9 @@ import io.vertx.core.json.JsonObject;
 import org.entcore.common.controller.ControllerHelper;
 import org.entcore.common.user.UserUtils;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -69,21 +72,58 @@ public class CourseController extends ControllerHelper {
             return;
         }
 
-        courseService.getCourses(structureId, startAt, endAt, new JsonArray(), new JsonArray(), new JsonArray(),
+        // L'appel interne (bus vie-scolaire, EventBusController#courseBusService) exige un format
+        // strict YYYY-MM-DD — startAt/endAt reçus ici sont des datetimes ISO complets (le créneau
+        // horaire précis de la réservation), on ne garde que la date pour cet appel et on filtre
+        // le chevauchement horaire nous-mêmes ci-dessous.
+        final String startDateOnly = startAt.length() >= 10 ? startAt.substring(0, 10) : startAt;
+        final String endDateOnly = endAt.length() >= 10 ? endAt.substring(0, 10) : endAt;
+        final Date requestedStart = parseIsoDateTime(startAt);
+        final Date requestedEnd = parseIsoDateTime(endAt);
+
+        courseService.getCourses(structureId, startDateOnly, endDateOnly, new JsonArray(), new JsonArray(), new JsonArray(),
                         new JsonArray(), null, null, true, false, null)
                 .onSuccess(courses -> {
                     JsonArray matching = new JsonArray();
                     for (Object o : courses) {
                         JsonObject course = (JsonObject) o;
                         JsonArray roomLabels = course.getJsonArray("roomLabels", new JsonArray());
-                        boolean matches = roomLabels.stream()
+                        boolean matchesRoom = roomLabels.stream()
                                 .anyMatch(r -> room.trim().equalsIgnoreCase(String.valueOf(r).trim()));
-                        if (matches) {
+                        if (matchesRoom && overlaps(course, requestedStart, requestedEnd)) {
                             matching.add(course);
                         }
                     }
                     renderJson(request, matching);
                 })
                 .onFailure(err -> badRequest(request));
+    }
+
+    private static Date parseIsoDateTime(String value) {
+        try {
+            return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").parse(value);
+        } catch (ParseException e) {
+            return null;
+        }
+    }
+
+    private static Date parseCourseDate(String value) {
+        try {
+            return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(value);
+        } catch (ParseException | NullPointerException e) {
+            return null;
+        }
+    }
+
+    private static boolean overlaps(JsonObject course, Date requestedStart, Date requestedEnd) {
+        if (requestedStart == null || requestedEnd == null) {
+            return true; // dates non fournies/invalides : on ne filtre pas, on garde tout (comportement précédent)
+        }
+        Date courseStart = parseCourseDate(course.getString("startDate"));
+        Date courseEnd = parseCourseDate(course.getString("endDate"));
+        if (courseStart == null || courseEnd == null) {
+            return true;
+        }
+        return courseStart.before(requestedEnd) && courseEnd.after(requestedStart);
     }
 }
