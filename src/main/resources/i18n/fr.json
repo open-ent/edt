@@ -157,6 +157,7 @@
   "edt.utils.no": "Non",
   "edt.utils.ok": "Ok",
   "edt.utils.room": "Salle",
+  "edt.utils.resource": "Ressource",
   "edt.utils.room.readonly": "Ce champ n'est plus modifiable — utilisez la ressource RBS à côté, ou un import pour les salles existantes.",
   "edt.rbs.category.mismatch.notcategory": "n'est pas de catégorie",
   "edt.rbs.category.mismatch.expectedfor": "attendue pour",

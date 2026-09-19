@@ -157,6 +157,7 @@
   "edt.utils.no": "No",
   "edt.utils.ok": "Ok",
   "edt.utils.room": "Room",
+  "edt.utils.resource": "Resource",
   "edt.utils.room.readonly": "This field is no longer editable — use the RBS resource next to it, or an import for existing rooms.",
   "edt.rbs.category.mismatch.notcategory": "is not of category",
   "edt.rbs.category.mismatch.expectedfor": "expected for",

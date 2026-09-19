@@ -32,6 +32,13 @@
        </span>
     </div>
 
+    <!--LIST OF RBS RESOURCES (matériel mobile, etc. — indépendant de roomLabels)-->
+    <div ng-if="item.course.rbsResourceLabels.length">
+       <span ng-repeat="resourceLabel in item.course.rbsResourceLabels">
+           <i18n>edt.utils.resource</i18n>: [[resourceLabel]]
+       </span>
+    </div>
+
     <!--COURSE TAG LABEL-->
     <div class="tooltip-cours-tag">
            <span ng-repeat="tag in item.course.tags">

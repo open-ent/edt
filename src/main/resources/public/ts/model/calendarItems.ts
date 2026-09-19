@@ -215,6 +215,8 @@ export class CalendarItems {
             }
         }
 
+        await this.resolveRbsResourceLabels(structure);
+
         this.sortByClassesAndGroups();
 
         if (teachers.length > 1) {
@@ -222,6 +224,31 @@ export class CalendarItems {
         }
 
         return;
+    }
+
+    // Résout item.course.rbsResourceIds (ids numériques) en libellés affichables pour l'infobulle
+    // du calendrier (course-tooltip.html) — roomLabels est un texte libre indépendant, toujours
+    // affiché en plus. Un seul appel réseau par sync(), et seulement si au moins un cours porte
+    // des rbsResourceIds (sinon coût réseau inutile pour les structures qui n'utilisent pas RBS).
+    private resolveRbsResourceLabels = async (structure: Structure): Promise<void> => {
+        const hasRbsResources: boolean = this.all.some((item: CalendarItem): boolean =>
+            item.course.rbsResourceIds && item.course.rbsResourceIds.length > 0);
+        if (!hasRbsResources || !structure || !structure.id) return;
+
+        try {
+            const {data}: AxiosResponse = await http.get(`/edt/structures/${structure.id}/rbs/resources`);
+            const resources: Array<any> = (data && data.resources) || [];
+            const nameById: {[id: number]: string} = {};
+            resources.forEach((r: any): void => { nameById[r.id] = r.name; });
+
+            this.all.forEach((item: CalendarItem): void => {
+                item.course.rbsResourceLabels = (item.course.rbsResourceIds || [])
+                    .map((id: number): string => nameById[id])
+                    .filter((name: string): boolean => !!name);
+            });
+        } catch (e) {
+            // Silencieux : l'infobulle retombe simplement sur roomLabels, aucune donnée perdue.
+        }
     }
 
     sortByClassesAndGroups = (): void => {

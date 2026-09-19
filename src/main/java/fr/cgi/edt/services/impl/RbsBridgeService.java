@@ -14,12 +14,15 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -37,6 +40,17 @@ public class RbsBridgeService {
     private static final ZoneId ZONE        = ZoneId.of(RBS_IANA);
     private static final DateTimeFormatter EDT_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+
+    private static final Map<DayOfWeek, String> FRENCH_DAY_LABELS = new EnumMap<>(DayOfWeek.class);
+    static {
+        FRENCH_DAY_LABELS.put(DayOfWeek.MONDAY, "lundi");
+        FRENCH_DAY_LABELS.put(DayOfWeek.TUESDAY, "mardi");
+        FRENCH_DAY_LABELS.put(DayOfWeek.WEDNESDAY, "mercredi");
+        FRENCH_DAY_LABELS.put(DayOfWeek.THURSDAY, "jeudi");
+        FRENCH_DAY_LABELS.put(DayOfWeek.FRIDAY, "vendredi");
+        FRENCH_DAY_LABELS.put(DayOfWeek.SATURDAY, "samedi");
+        FRENCH_DAY_LABELS.put(DayOfWeek.SUNDAY, "dimanche");
+    }
 
     private RbsBridgeService() {
         throw new IllegalStateException("Utility class");
@@ -87,9 +101,16 @@ public class RbsBridgeService {
             if (startStr == null || endStr == null) { checkDone.run(); continue; }
 
             long startEpoch, endEpoch;
+            String bookingReason;
             try {
-                startEpoch = parseEdtDate(startStr);
-                endEpoch   = parseEdtDate(endStr);
+                LocalDateTime start = LocalDateTime.parse(startStr, EDT_FMT);
+                LocalDateTime end = LocalDateTime.parse(endStr, EDT_FMT);
+                startEpoch = start.atZone(ZONE).toEpochSecond();
+                endEpoch   = end.atZone(ZONE).toEpochSecond();
+                // Motif lisible par l'utilisateur final dans RBS (jamais le sigle "EDT" — cf.
+                // feedback : les sigles de modules ne veulent rien dire pour un utilisateur).
+                bookingReason = "Cours de l'Emploi du temps, le " + FRENCH_DAY_LABELS.get(start.getDayOfWeek())
+                        + " de " + start.toLocalTime() + " à " + end.toLocalTime();
             } catch (DateTimeParseException e) {
                 log.warn("[EDT@RbsBridgeService] Cannot parse dates '" + startStr + "'/'" + endStr + "': " + e.getMessage());
                 checkDone.run();
@@ -112,7 +133,7 @@ public class RbsBridgeService {
                 bookings.add(new JsonObject()
                         .put("resource",       new JsonObject().put("id", resourceId))
                         .put("slots",          slots)
-                        .put("booking_reason", "EDT")
+                        .put("booking_reason", bookingReason)
                         .put("iana",           RBS_IANA)
                 );
             }
@@ -237,11 +258,5 @@ public class RbsBridgeService {
         if (busReply == null || !"ok".equals(busReply.getString("status"))) return new JsonArray();
         JsonArray result = busReply.getJsonArray("result");
         return result != null ? result : new JsonArray();
-    }
-
-    private static long parseEdtDate(String dateStr) {
-        return LocalDateTime.parse(dateStr, EDT_FMT)
-                .atZone(ZONE)
-                .toEpochSecond();
     }
 }

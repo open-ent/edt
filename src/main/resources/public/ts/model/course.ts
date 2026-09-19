@@ -54,6 +54,9 @@ export class Course {
     // Ressources RBS (réservation de ressources) liées à ce cours — coexiste avec roomLabels
     // (texte libre), ne le remplace pas.
     rbsResourceIds: Array<number> = [];
+    // Libellés résolus des rbsResourceIds (nom de la ressource RBS), calculés côté front par
+    // CalendarItems.sync() pour l'affichage (infobulle du calendrier) — jamais persisté.
+    rbsResourceLabels: Array<string> = [];
 
     constructor(obj?: object) {
         if (obj && obj instanceof Object) {
