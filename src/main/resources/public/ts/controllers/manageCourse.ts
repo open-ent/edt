@@ -13,6 +13,18 @@ declare const window: any;
 
 export let manageCourseCtrl = ng.controller('manageCourseCtrl',
     ['$scope', '$location', '$routeParams', "$timeout", "CourseTagService", ($scope, $location, $routeParams, $timeout, courseTagService: ICourseTagService) => {
+        // Retour vers l'agenda en préservant la semaine consultée avant l'ouverture de ce cours
+        // (portée par la route /edit/:type/:idCourse/:beginning?/:end?) : sans ça, le contrôleur
+        // de la vue principale (EdtController, route "main") réinitialise systématiquement la
+        // date affichée sur "aujourd'hui" (changeDatesOnSunday), qui n'a aucun rapport avec la
+        // semaine que l'utilisateur avait choisie avant de cliquer sur ce cours.
+        const goToCalendarPreservingWeek = (): void => {
+            if ($routeParams['beginning']) {
+                $location.search('returnDate', $routeParams.beginning);
+            }
+            $scope.goTo('/');
+        };
+
         $scope.timeSlotHourPeriod = TimeSlotHourPeriod;
         $scope.daysOfWeek = DAYS_OF_WEEK;
         $scope.comboLabels = COMBO_LABELS;
@@ -248,6 +260,29 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         // visible partout.
         $scope.rbsPicker = { selectedId: null };
 
+        // Priorise dans le sélecteur les salles de la catégorie requise pour la matière du cours,
+        // sans jamais masquer les autres (dégradation gracieuse si la détection de catégorie se
+        // trompe, ou si la structure n'a pas de salle de cette catégorie) — complète
+        // rbsRoomCategoryWarning(), qui n'avertit qu'une fois une salle déjà choisie.
+        // Valeur mémoïsée (pas une fonction appelée depuis ng-options) : ng-options réévalue son
+        // expression à chaque digest, et une fonction qui retourne un NOUVEAU tableau à chaque
+        // appel (ex. [...arr].sort(...)) casse la stabilité de référence attendue par Angular —
+        // ça a déjà causé une régression sur tout l'écran (créneaux qui ne s'ouvrent plus,
+        // navigation d'agenda qui saute de semaine).
+        $scope.sortedRbsResources = [];
+        const updateSortedRbsResources = (): void => {
+            if (!$scope.course.subjectId) { $scope.sortedRbsResources = $scope.rbsResources; return; }
+            const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
+            const requiredCategory: string = subject ? getRequiredRoomCategory(subject) : null;
+            if (!requiredCategory) { $scope.sortedRbsResources = $scope.rbsResources; return; }
+            $scope.sortedRbsResources = [...$scope.rbsResources].sort((a: any, b: any) => {
+                const aMatch: number = categoryMatches(a.typeCategory, requiredCategory) ? 0 : 1;
+                const bMatch: number = categoryMatches(b.typeCategory, requiredCategory) ? 0 : 1;
+                return aMatch - bMatch;
+            });
+        };
+        $scope.$watch('course.subjectId', updateSortedRbsResources);
+
         $scope.loadRbsResources = async function (): Promise<void> {
             $scope.rbsResources = [];
             if (!$scope.structure || !$scope.structure.id) { return; }
@@ -273,25 +308,23 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             } catch (e) {
                 $scope.rbsResources = [];
             }
+            // Pré-sélectionne par corrélation de nom exact avec roomLabels si le cours n'a jamais
+            // été explicitement lié à une ressource RBS (ex. cours généré par school-planner,
+            // source="school-planner" : la salle y est un simple label texte, sans rbsResourceIds)
+            // — même patron de corrélation que room-conflicts côté serveur. Purement indicatif :
+            // ne modifie rien en base tant que l'utilisateur n'enregistre pas le formulaire.
+            if ((!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length)
+                    && $scope.course.roomLabels && $scope.course.roomLabels.length) {
+                const roomLabel: string = ($scope.course.roomLabels[0] || '').trim().toLowerCase();
+                const matched: any = roomLabel && $scope.rbsResources.find((r: any) => r.name.trim().toLowerCase() === roomLabel);
+                if (matched) {
+                    $scope.course.rbsResourceIds = [matched.id];
+                }
+            }
+            updateSortedRbsResources();
             Utils.safeApply($scope);
         };
         $scope.loadRbsResources();
-
-        // Priorise dans le sélecteur les salles de la catégorie requise pour la matière du cours,
-        // sans jamais masquer les autres (dégradation gracieuse si la détection de catégorie se
-        // trompe, ou si la structure n'a pas de salle de cette catégorie) — complète
-        // rbsRoomCategoryWarning(), qui n'avertit qu'une fois une salle déjà choisie.
-        $scope.getSortedRbsResources = (): any[] => {
-            if (!$scope.course.subjectId) { return $scope.rbsResources; }
-            const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
-            const requiredCategory: string = subject ? getRequiredRoomCategory(subject) : null;
-            if (!requiredCategory) { return $scope.rbsResources; }
-            return [...$scope.rbsResources].sort((a: any, b: any) => {
-                const aMatch: number = categoryMatches(a.typeCategory, requiredCategory) ? 0 : 1;
-                const bMatch: number = categoryMatches(b.typeCategory, requiredCategory) ? 0 : 1;
-                return aMatch - bMatch;
-            });
-        };
 
         $scope.rbsResourceLabel = function (id: number): string {
             const found: any = $scope.rbsResources.find((r: any) => r.id === id);
@@ -689,7 +722,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
          */
         $scope.cancelCreation = () => {
             delete $scope.course;
-            $scope.goTo('/');
+            goToCalendarPreservingWeek();
 
         };
 
@@ -779,7 +812,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
                 notifyRbsConflicts(await course.save());
             }
             delete $scope.course;
-            $scope.goTo('/');
+            goToCalendarPreservingWeek();
         };
 
         const setDatesFromTimeslots = (course: Course): void => {
@@ -892,7 +925,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         $scope.dropCourse = async (course: Course) => {
             $scope.editOccurrence || !course.is_recurrent ? await course.delete(course._id) : await course.delete(null, course.recurrence);
             delete $scope.course;
-            $scope.goTo('/');
+            goToCalendarPreservingWeek();
             await $scope.syncCourses();
         };
 

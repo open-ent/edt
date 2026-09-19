@@ -1020,7 +1020,17 @@ export let main = ng.controller("EdtController", [
       main: (): void => {
         template.open("main", "main/main");
         initTimeSlots();
-        changeDatesOnSunday();
+        // Retour depuis l'écran d'édition d'un cours (manageCourse.ts::goToCalendarPreservingWeek) :
+        // restaure la semaine que l'utilisateur consultait avant l'ouverture du cours, au lieu de
+        // toujours retomber sur "aujourd'hui" (changeDatesOnSunday, comportement par défaut pour
+        // toute autre entrée sur cette route).
+        const returnDate = $location.search().returnDate;
+        if (returnDate) {
+          model.calendar.setDate(moment(returnDate, "x"));
+          $location.search("returnDate", null);
+        } else {
+          changeDatesOnSunday();
+        }
         if (!$scope.pageInitialized) {
           setTimeout((): void => {
             initTriggers(true);
