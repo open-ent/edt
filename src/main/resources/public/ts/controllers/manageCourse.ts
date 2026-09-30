@@ -291,7 +291,8 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             $scope.rbsRoomConflictWarning = '';
             if (!$scope.structure || !$scope.structure.id) { return; }
             if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return; }
-            if (!$scope.course.startCourse || !$scope.course.endCourse) { return; }
+            if (!$scope.courseOccurrenceForm || !$scope.courseOccurrenceForm.startTime
+                    || !$scope.courseOccurrenceForm.endTime) { return; }
 
             const rooms: any[] = $scope.course.rbsResourceIds
                 .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
@@ -299,8 +300,8 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             if (!rooms.length) { return; }
 
             const ownBookingIds: number[] = ($scope.course.rbsBookingIds || []) as number[];
-            const start: string = moment($scope.course.startCourse).format('YYYY-MM-DDTHH:mm:ss');
-            const end: string = moment($scope.course.endCourse).format('YYYY-MM-DDTHH:mm:ss');
+            const start: string = moment($scope.courseOccurrenceForm.startTime).format('YYYY-MM-DDTHH:mm:ss');
+            const end: string = moment($scope.courseOccurrenceForm.endTime).format('YYYY-MM-DDTHH:mm:ss');
             const conflictingRooms: string[] = [];
             for (const room of rooms) {
                 let conflict: boolean = false;
@@ -329,7 +330,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             Utils.safeApply($scope);
         };
         $scope.$watchGroup(
-            ['course.rbsResourceIds.length', 'course.startCourse', 'course.endCourse'],
+            ['course.rbsResourceIds.length', 'courseOccurrenceForm.startTime', 'courseOccurrenceForm.endTime'],
             checkRoomAvailability
         );
 
