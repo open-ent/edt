@@ -286,13 +286,43 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         // Avertit si la salle choisie est déjà prise sur ce créneau (autre cours EDT ou
         // réservation RBS) — exclut les réservations déjà liées à CE cours (rbsBookingIds), pour
         // ne pas s'avertir soi-même en rééditant un cours déjà réservé. Non bloquant.
+        //
+        // Deux façons de saisir l'horaire sur ce formulaire (cf. display.freeSchedule) : soit un
+        // créneau nommé de la grille établissement (ex. "M1 : 07:00"), soit un horaire libre. Dans
+        // le premier cas — le plus courant, tout établissement avec une vraie grille horaire —
+        // seul course.timeSlot.start/end (des libellés d'heure, pas des dates) change quand
+        // l'utilisateur choisit un créneau ; courseOccurrenceForm.startTime/endTime ne bougent
+        // QUE pour l'horaire libre (cf. selectTime()). Il faut donc combiner course.startDate (la
+        // date choisie) avec l'heure effective, quel que soit le mode, comme le fait déjà
+        // selectTime() elle-même pour valider un créneau.
+        const effectiveOccurrence = (): { start: string; end: string } | null => {
+            let startHour: Date = null;
+            let endHour: Date = null;
+            if ($scope.display.freeSchedule && $scope.courseOccurrenceForm.startTime) {
+                startHour = $scope.courseOccurrenceForm.startTime;
+                endHour = $scope.courseOccurrenceForm.endTime;
+            } else if (!$scope.display.freeSchedule && $scope.course.timeSlot) {
+                if ($scope.course.timeSlot.start && $scope.course.timeSlot.start.startHour) {
+                    startHour = DateUtils.getTimeFormatDate($scope.course.timeSlot.start.startHour);
+                }
+                if ($scope.course.timeSlot.end && $scope.course.timeSlot.end.endHour) {
+                    endHour = DateUtils.getTimeFormatDate($scope.course.timeSlot.end.endHour);
+                }
+            }
+            if (!$scope.course.startDate || !startHour || !endHour) { return null; }
+            return {
+                start: DateUtils.getDateTimeFormat($scope.course.startDate, startHour),
+                end: DateUtils.getDateTimeFormat($scope.course.startDate, endHour),
+            };
+        };
+
         $scope.rbsRoomConflictWarning = '';
         const checkRoomAvailability = async (): Promise<void> => {
             $scope.rbsRoomConflictWarning = '';
             if (!$scope.structure || !$scope.structure.id) { return; }
             if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return; }
-            if (!$scope.courseOccurrenceForm || !$scope.courseOccurrenceForm.startTime
-                    || !$scope.courseOccurrenceForm.endTime) { return; }
+            const occurrence = effectiveOccurrence();
+            if (!occurrence) { return; }
 
             const rooms: any[] = $scope.course.rbsResourceIds
                 .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
@@ -300,8 +330,8 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             if (!rooms.length) { return; }
 
             const ownBookingIds: number[] = ($scope.course.rbsBookingIds || []) as number[];
-            const start: string = moment($scope.courseOccurrenceForm.startTime).format('YYYY-MM-DDTHH:mm:ss');
-            const end: string = moment($scope.courseOccurrenceForm.endTime).format('YYYY-MM-DDTHH:mm:ss');
+            const start: string = moment(occurrence.start).format('YYYY-MM-DDTHH:mm:ss');
+            const end: string = moment(occurrence.end).format('YYYY-MM-DDTHH:mm:ss');
             const conflictingRooms: string[] = [];
             for (const room of rooms) {
                 let conflict: boolean = false;
@@ -330,7 +360,14 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             Utils.safeApply($scope);
         };
         $scope.$watchGroup(
-            ['course.rbsResourceIds.length', 'courseOccurrenceForm.startTime', 'courseOccurrenceForm.endTime'],
+            [
+                'course.rbsResourceIds.length',
+                'course.startDate',
+                'course.timeSlot.start.startHour',
+                'course.timeSlot.end.endHour',
+                'courseOccurrenceForm.startTime',
+                'courseOccurrenceForm.endTime',
+            ],
             checkRoomAvailability
         );
 
