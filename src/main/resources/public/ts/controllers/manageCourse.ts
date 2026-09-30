@@ -283,20 +283,9 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         };
         $scope.$watch('course.subjectId', updateSortedRbsResources);
 
-        // --- Avertissement de disponibilité réelle (conflit avec un AUTRE cours EDT ou une
-        // réservation RBS déjà posée) ---
-        // Complète rbsRoomCategoryWarning() (catégorie) par une vérification de créneau : la
-        // salle choisie est-elle déjà occupée sur ce créneau ?
-        // - Côté EDT : réutilise l'endpoint déjà utilisé dans l'autre sens par RBS
-        //   (checkEdtRoomConflict côté booking-form.ts/calendar-rbs-booking.sniplet.ts) :
-        //   /edt/structures/:id/room-conflicts.
-        // - Côté RBS : /rbs/resource/:id/booking-conflicts, volontairement SANS le droit RBS
-        //   individuel habituel (@ResourceFilter) — un enseignant qui saisit un cours à la main
-        //   n'a en général aucun partage RBS direct sur la salle (même contrainte déjà rencontrée
-        //   pour le circuit d'approbation Calendar/RBS). Exclut les réservations déjà créées pour
-        //   CE cours (course.rbsBookingIds, capturées par RbsBridgeService côté serveur) pour ne
-        //   pas s'avertir soi-même à chaque réédition d'un cours déjà réservé.
-        // Non bloquant dans tous les cas, comme rbsRoomCategoryWarning().
+        // Avertit si la salle choisie est déjà prise sur ce créneau (autre cours EDT ou
+        // réservation RBS) — exclut les réservations déjà liées à CE cours (rbsBookingIds), pour
+        // ne pas s'avertir soi-même en rééditant un cours déjà réservé. Non bloquant.
         $scope.rbsRoomConflictWarning = '';
         const checkRoomAvailability = async (): Promise<void> => {
             $scope.rbsRoomConflictWarning = '';
