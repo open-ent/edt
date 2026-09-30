@@ -161,6 +161,7 @@
   "edt.utils.room.readonly": "This field is no longer editable — use the RBS resource next to it, or an import for existing rooms.",
   "edt.rbs.category.mismatch.notcategory": "is not of category",
   "edt.rbs.category.mismatch.expectedfor": "expected for",
+  "edt.rbs.room.conflict.detected": "already occupied by another course at this time slot",
   "edt.utils.rbs.resource": "RBS resource",
   "edt.utils.rbs.resource.choose": "Choose a resource…",
   "edt.utils.save": "Save",

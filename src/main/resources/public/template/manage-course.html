@@ -239,6 +239,11 @@
                     <div class="warning" ng-if="rbsRoomCategoryWarning()">
                         [[rbsRoomCategoryWarning()]]
                     </div>
+                    <!--Avertissement non bloquant : la salle choisie est déjà occupée par un
+                        autre cours sur ce créneau. N'empêche jamais l'enregistrement.-->
+                    <div class="warning" ng-if="rbsRoomConflictWarning">
+                        [[rbsRoomConflictWarning]]
+                    </div>
                 </div>
             </div>
 

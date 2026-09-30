@@ -283,6 +283,67 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         };
         $scope.$watch('course.subjectId', updateSortedRbsResources);
 
+        // --- Avertissement de disponibilité réelle (conflit avec un AUTRE cours EDT ou une
+        // réservation RBS déjà posée) ---
+        // Complète rbsRoomCategoryWarning() (catégorie) par une vérification de créneau : la
+        // salle choisie est-elle déjà occupée sur ce créneau ?
+        // - Côté EDT : réutilise l'endpoint déjà utilisé dans l'autre sens par RBS
+        //   (checkEdtRoomConflict côté booking-form.ts/calendar-rbs-booking.sniplet.ts) :
+        //   /edt/structures/:id/room-conflicts.
+        // - Côté RBS : /rbs/resource/:id/booking-conflicts, volontairement SANS le droit RBS
+        //   individuel habituel (@ResourceFilter) — un enseignant qui saisit un cours à la main
+        //   n'a en général aucun partage RBS direct sur la salle (même contrainte déjà rencontrée
+        //   pour le circuit d'approbation Calendar/RBS). Exclut les réservations déjà créées pour
+        //   CE cours (course.rbsBookingIds, capturées par RbsBridgeService côté serveur) pour ne
+        //   pas s'avertir soi-même à chaque réédition d'un cours déjà réservé.
+        // Non bloquant dans tous les cas, comme rbsRoomCategoryWarning().
+        $scope.rbsRoomConflictWarning = '';
+        const checkRoomAvailability = async (): Promise<void> => {
+            $scope.rbsRoomConflictWarning = '';
+            if (!$scope.structure || !$scope.structure.id) { return; }
+            if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return; }
+            if (!$scope.course.startCourse || !$scope.course.endCourse) { return; }
+
+            const rooms: any[] = $scope.course.rbsResourceIds
+                .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
+                .filter((r: any) => !!r);
+            if (!rooms.length) { return; }
+
+            const ownBookingIds: number[] = ($scope.course.rbsBookingIds || []) as number[];
+            const start: string = moment($scope.course.startCourse).format('YYYY-MM-DDTHH:mm:ss');
+            const end: string = moment($scope.course.endCourse).format('YYYY-MM-DDTHH:mm:ss');
+            const conflictingRooms: string[] = [];
+            for (const room of rooms) {
+                let conflict: boolean = false;
+                try {
+                    const {data}: any = await http.get(
+                        `/edt/structures/${$scope.structure.id}/room-conflicts/${start}/${end}`,
+                        {params: {room: room.name}}
+                    );
+                    conflict = conflict || (data || []).some((c: any) => c._id !== $scope.course._id);
+                } catch (e) {
+                    // Avertissement non bloquant : silence total en cas d'échec de l'appel.
+                }
+                try {
+                    const {data}: any = await http.get(
+                        `/rbs/resource/${room.id}/booking-conflicts/${start}/${end}`);
+                    conflict = conflict || (data || []).some((b: any) => ownBookingIds.indexOf(b.id) === -1);
+                } catch (e) {
+                    // Avertissement non bloquant : silence total en cas d'échec de l'appel.
+                }
+                if (conflict) { conflictingRooms.push(room.name); }
+            }
+            if (conflictingRooms.length) {
+                $scope.rbsRoomConflictWarning = conflictingRooms.join(', ') + ' '
+                    + lang.translate('edt.rbs.room.conflict.detected');
+            }
+            Utils.safeApply($scope);
+        };
+        $scope.$watchGroup(
+            ['course.rbsResourceIds.length', 'course.startCourse', 'course.endCourse'],
+            checkRoomAvailability
+        );
+
         $scope.loadRbsResources = async function (): Promise<void> {
             $scope.rbsResources = [];
             if (!$scope.structure || !$scope.structure.id) { return; }
