@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       entcore_version:
-        description: 'Version entcore (ex: 6.14.9-patched). Laissez vide pour utiliser la version du pom.xml.'
+        description: 'Version entcore (ex: 6.16.14-patched). Laissez vide pour utiliser la version du pom.xml.'
         required: false
         default: ''
 
@@ -93,6 +93,11 @@ jobs:
                 <username>$GITHUB_ACTOR</username>
                 <password>$GITHUB_TOKEN</password>
               </server>
+              <server>
+                <id>pt-releases</id>
+                <username>$NEXUS_USER</username>
+                <password>$NEXUS_PASSWORD</password>
+              </server>
             </servers>
             <profiles>
               <profile>
@@ -116,6 +121,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
+          NEXUS_USER: ${{ secrets.NEXUS_USER }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 
       - name: Download frontend assets
         uses: actions/download-artifact@v8
@@ -149,6 +156,11 @@ jobs:
                 <id>github</id>
                 <username>${env.GITHUB_ACTOR}</username>
                 <password>${env.GITHUB_TOKEN}</password>
+              </server>
+              <server>
+                <id>pt-releases</id>
+                <username>${{ secrets.NEXUS_USER }}</username>
+                <password>${{ secrets.NEXUS_PASSWORD }}</password>
               </server>
             </servers>
           </settings>
