@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { api, Course, Group } from '../api';
+import { api, childClasses, Course, Group } from '../api';
 import { composesOwnFilter, sortGroups } from '../context';
 import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
@@ -20,8 +20,23 @@ export function Timetable() {
   const { t } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
   const qc = useQueryClient();
-  const structureId = ctx.structure?.id ?? '';
   const isTeacher = ctx.profile === 'teacher';
+  const isStudent = ctx.profile === 'student';
+  const isRelative = ctx.profile === 'relative';
+
+  // Parent : l'enfant affiché (le premier par ordre alphabétique, comme l'AngularJS) et
+  // l'établissement de cet enfant. Ex. Karim → Abd-Samad, 501, collège de Morlaix.
+  const childrenQuery = useQuery({ queryKey: ['edt', 'children'], queryFn: api.getChildren, enabled: isRelative });
+  const children = useMemo(
+    () =>
+      [...(childrenQuery.data ?? [])].sort(
+        (a, b) => (a.lastName ?? '').localeCompare(b.lastName ?? '') || (a.firstName ?? '').localeCompare(b.firstName ?? ''),
+      ),
+    [childrenQuery.data],
+  );
+  const [childId, setChildId] = useState('');
+  const child = children.find((c) => c.id === childId) ?? children[0];
+  const structureId = isRelative ? child?.structures?.[0]?.id ?? '' : ctx.structure?.id ?? '';
 
   // Lien profond depuis le dashboard (widget "prochain cours") : #/?date=YYYY-MM-DD&start=HH:MM
   // ouvre directement la bonne semaine et met en évidence le créneau visé.
@@ -46,7 +61,7 @@ export function Timetable() {
   const groupsQuery = useQuery({
     queryKey: ['edt', 'groups', structureId, isTeacher],
     queryFn: () => api.getGroups(structureId, isTeacher),
-    enabled: !!structureId && composesOwnFilter(ctx.profile),
+    enabled: !!structureId && !isRelative,
   });
   const matieresQuery = useQuery({ queryKey: ['edt', 'matieres', structureId], queryFn: () => api.getMatieres(structureId), enabled: !!structureId });
   const slotsQuery = useQuery({ queryKey: ['edt', 'timeslots', structureId], queryFn: () => api.getTimeSlots(structureId), enabled: !!structureId });
@@ -55,7 +70,7 @@ export function Timetable() {
   const teachersQuery = useQuery({
     queryKey: ['edt', 'teachers', structureId],
     queryFn: () => api.getTeachers(structureId),
-    enabled: !!structureId && composesOwnFilter(ctx.profile),
+    enabled: !!structureId,
   });
 
   // Comme l'Angular : un enseignant voit d'emblée son propre emploi du temps, le personnel part
@@ -90,20 +105,30 @@ export function Timetable() {
     },
   });
   const newCourseValid = !!(newSubjectId && newClassName && newDate && newStart && newEnd && teacherId);
-  const classes = useMemo(() => sortGroups(groupsQuery.data ?? []), [groupsQuery.data]);
+  const classes = useMemo(
+    () => (isRelative ? (child ? childClasses(child) : []) : sortGroups(groupsQuery.data ?? [])),
+    [isRelative, child, groupsQuery.data],
+  );
+  // Élève et parent ne composent pas leur filtre : toutes les classes et tous les groupes de
+  // l'élève concerné sont affichés d'office (AngularJS : params.group = groupes de l'élève).
+  const activeSelection: Selection = composesOwnFilter(ctx.profile)
+    ? selection
+    : { ...EMPTY_SELECTION, chosen: classes.map((c) => c.id) };
+  // Groupes des classes restreints à ceux de l'élève (paramètre student de group/from/class).
+  const studentId = isStudent ? teacherId : isRelative ? child?.id : undefined;
   // Groupes des classes choisies (demi-groupes, options), ajoutés automatiquement au filtre.
   const chosenClassIds = useMemo(
-    () => selection.chosen.filter((id) => classes.find((c) => c.id === id)?.type_groupe === 0).sort(),
-    [selection.chosen, classes],
+    () => activeSelection.chosen.filter((id) => classes.find((c) => c.id === id)?.type_groupe === 0).sort(),
+    [activeSelection.chosen, classes],
   );
   const subGroupsQuery = useQuery({
-    queryKey: ['edt', 'subgroups', chosenClassIds],
-    queryFn: () => api.getSubGroups(chosenClassIds),
+    queryKey: ['edt', 'subgroups', chosenClassIds, studentId],
+    queryFn: () => api.getSubGroups(chosenClassIds, studentId),
     enabled: chosenClassIds.length > 0,
     placeholderData: (previous) => previous,
   });
   const subGroups = useMemo(() => subGroupsQuery.data ?? new Map(), [subGroupsQuery.data]);
-  const shownGroupIds = useMemo(() => effectiveGroupIds(selection, subGroups), [selection, subGroups]);
+  const shownGroupIds = useMemo(() => effectiveGroupIds(activeSelection, subGroups), [activeSelection, subGroups]);
   const groupLabel = (g: Group) => (g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
   const slots = slotsQuery.data ?? [];
@@ -118,10 +143,10 @@ export function Timetable() {
         : t('edt.timetable.period.range', { 0: short(period.first), 1: short(period.last) });
   const startAt = ymd(period.first);
   const endAt = ymd(period.last);
-  const hasSelection = shownGroupIds.length > 0 || selection.teacherIds.length > 0;
+  const hasSelection = shownGroupIds.length > 0 || activeSelection.teacherIds.length > 0;
   const filter = useMemo(
-    () => coursesFilter(shownGroupIds, selection.teacherIds, classes, subGroups),
-    [shownGroupIds, selection.teacherIds, classes, subGroups],
+    () => coursesFilter(shownGroupIds, activeSelection.teacherIds, classes, subGroups),
+    [shownGroupIds, activeSelection.teacherIds, classes, subGroups],
   );
   // Attendre de connaître les groupes des classes choisies avant de lire les cours : sinon un
   // premier affichage montre la classe sans ses groupes (ex. 602 sans GARRESPAFFECTATION), puis
@@ -161,19 +186,6 @@ export function Timetable() {
         <h1>{t('edt.timetable.title')}</h1>
         <div className="alert alert-info" role="alert">
           {t('edt.no.structure')}
-        </div>
-      </div>
-    );
-  }
-
-  if (ctx.ready && !composesOwnFilter(ctx.profile)) {
-    // Élève et parent : leur emploi du temps (groupes de l'élève, choix de l'enfant) arrive avec
-    // l'incrément I6 de la migration ; en attendant, renvoi vers la version précédente.
-    return (
-      <div>
-        <h1>{t('edt.timetable.title')}</h1>
-        <div className="alert alert-info" role="alert">
-          {t('edt.timetable.student.pending')} <a href="/edt?ui=angular">{t('edt.timetable.previous.version')}</a>
         </div>
       </div>
     );
@@ -244,6 +256,7 @@ export function Timetable() {
       )}
 
       <div className="d-flex gap-16 align-items-start">
+        {composesOwnFilter(ctx.profile) && (
         <FilterSidebar
           groups={classes}
           subGroups={subGroups}
@@ -251,10 +264,22 @@ export function Timetable() {
           selection={selection}
           onChange={setSelection}
         />
+        )}
         <div className="flex-grow-1" style={{ minWidth: 0 }}>
       {/* Barre de contrôle : établissement, navigation semaine, affichage */}
       <div className="d-flex gap-16 flex-wrap align-items-end mb-16">
-        {ctx.structures.length > 1 && (
+        {isRelative && children.length > 1 && (
+          <div>
+            <label htmlFor="edt-child" className="form-label">{t('child.select')}</label>
+            <select id="edt-child" className="form-select" value={child?.id ?? ''} onChange={(e) => setChildId(e.target.value)}>
+              {children.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
+            </select>
+          </div>
+        )}
+        {isRelative && child && children.length === 1 && (
+          <p className="m-0 fw-bold" data-testid="edt-child-name">{child.displayName}</p>
+        )}
+        {composesOwnFilter(ctx.profile) && ctx.structures.length > 1 && (
           <div>
             <label htmlFor="edt-structure" className="form-label">{t('edt.timetable.structure')}</label>
             <select

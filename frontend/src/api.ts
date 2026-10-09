@@ -183,6 +183,35 @@ export const getRbsResources = async (structureId: string): Promise<Map<number, 
   return new Map((body?.resources ?? []).map((r) => [r.id, r.name]));
 };
 
+// ── Enfants d'un parent ─────────────────────────────────────────────────────────
+/**
+ * Enfant d'un parent, tel que renvoyé par /edt/user/children.
+ * Ex. { id, displayName: "CORBETT001 Abd-Samad", idClasses: ["eb3e…"], classes: ["707249$501"],
+ *       structures: [{ id: "9083…", name: "CLG-PIERRE MENDES FRANCE-MORLAIX" }] }.
+ */
+export interface Child {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  displayName: string;
+  /** Identifiants des classes de l'enfant. */
+  idClasses: string[];
+  /** Identifiants externes des classes, « <code>$<nom> » (ex. "707249$501"). */
+  classes: string[];
+  structures: Array<{ id: string; name: string }>;
+}
+
+export const getChildren = async (): Promise<Child[]> =>
+  (await json<Child[]>(await fetch('/edt/user/children', base))) ?? [];
+
+/** Classes d'un enfant au format du référentiel, ex. "707249$501" → { name: "501", externalId: "707249$501" }. */
+export const childClasses = (child: Child): Group[] =>
+  child.idClasses.map((id, i) => {
+    const externalId = child.classes[i];
+    const name = externalId?.includes('$') ? externalId.split('$').pop()! : externalId ?? id;
+    return { id, name, externalId, type_groupe: 0, isInCurrentTeacher: false };
+  });
+
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
 /** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
 export const getStructurePreference = async (): Promise<{ id?: string; name?: string }> => {
@@ -344,6 +373,7 @@ export const api = {
   getTeachers,
   getCourses,
   getRbsResources,
+  getChildren,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,
