@@ -349,7 +349,11 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
                 try {
                     const {data}: any = await http.get(
                         `/rbs/resource/${room.id}/booking-conflicts/${start}/${end}`);
-                    conflict = conflict || (data || []).some((b: any) => ownBookingIds.indexOf(b.id) === -1);
+                    // Réservation « mère » d'une série périodique ignorée : elle couvre toute
+                    // l'année et n'occupe que ses jours (ex. « jeudi 16:00-17:00 » ne rend pas la
+                    // salle occupée un lundi) ; seules ses occurrences comptent.
+                    conflict = conflict || (data || []).some((b: any) =>
+                        ownBookingIds.indexOf(b.id) === -1 && !(b.is_periodic && !b.parent_booking_id));
                 } catch (e) {
                     // Avertissement non bloquant : silence total en cas d'échec de l'appel.
                 }
