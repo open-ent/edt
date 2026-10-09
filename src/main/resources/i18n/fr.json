@@ -290,5 +290,16 @@
   "edt.timetable.filter.teachers": "Enseignants",
   "edt.timetable.filter.subgroups": "Groupes des classes choisies",
   "edt.timetable.filter.remove": "Retirer [[0]]",
-  "edt.timetable.select.prompt": "Sélectionnez des classes, des groupes ou des enseignants pour afficher leur emploi du temps."
+  "edt.timetable.select.prompt": "Sélectionnez des classes, des groupes ou des enseignants pour afficher leur emploi du temps.",
+  "edt.timetable.view.day": "Jour",
+  "edt.timetable.view.week": "Semaine",
+  "edt.timetable.view.fortnight": "Quinzaine",
+  "edt.timetable.view.month": "Mois",
+  "edt.timetable.nav.prev": "← Précédent",
+  "edt.timetable.nav.next": "Suivant →",
+  "edt.timetable.nav.today": "Aujourd'hui",
+  "edt.timetable.nav.goto": "Aller à la date",
+  "edt.timetable.period.range": "du [[0]] au [[1]]",
+  "edt.timetable.quarters": "Quarts d'heure",
+  "edt.timetable.courses.empty": "Aucun cours sur cette période."
 }

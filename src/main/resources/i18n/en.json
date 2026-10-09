@@ -290,5 +290,16 @@
   "edt.timetable.filter.teachers": "Teachers",
   "edt.timetable.filter.subgroups": "Groups of the selected classes",
   "edt.timetable.filter.remove": "Remove [[0]]",
-  "edt.timetable.select.prompt": "Select classes, groups or teachers to display their timetable."
+  "edt.timetable.select.prompt": "Select classes, groups or teachers to display their timetable.",
+  "edt.timetable.view.day": "Day",
+  "edt.timetable.view.week": "Week",
+  "edt.timetable.view.fortnight": "Fortnight",
+  "edt.timetable.view.month": "Month",
+  "edt.timetable.nav.prev": "← Previous",
+  "edt.timetable.nav.next": "Next →",
+  "edt.timetable.nav.today": "Today",
+  "edt.timetable.nav.goto": "Go to date",
+  "edt.timetable.period.range": "from [[0]] to [[1]]",
+  "edt.timetable.quarters": "Quarter hours",
+  "edt.timetable.courses.empty": "No course in this period."
 }

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Course, TimeSlot } from '../api';
 import { groupColor, textOn } from '../colors';
 import { axisBounds, courseSubject, dayOf, isPast, minutesOf, minutesOfHour, placeDay } from '../grid';
-import { addDays, ymd } from '../utils';
+import { ymd } from '../utils';
 
 /** Hauteur d'une minute à l'écran : une heure = 64 px. */
 const PX_PER_MIN = 64 / 60;
@@ -12,7 +12,10 @@ const PX_PER_MIN = 64 / 60;
 const TAGGED_BACKGROUND = 'rgba(246, 246, 246, 1)';
 
 interface Props {
-  monday: Date;
+  /** Jours affichés : un seul en vue Jour, sept en vue Semaine. */
+  days: Date[];
+  /** Repères tous les quarts d'heure (option d'affichage, active par défaut comme l'AngularJS). */
+  showQuarterHours?: boolean;
   courses: Course[];
   slots: TimeSlot[];
   teacherName: (id: string) => string | undefined;
@@ -32,14 +35,18 @@ const hhmm = (minutes: number) =>
  * masqué). Survol ou clic sur un cours → détail (horaire, enseignants, classes, salles, ressources
  * RBS, étiquettes). Ex. deux cours de 08:00 à 09:00 le lundi → deux colonnes côte à côte.
  */
-export function WeekGrid({ monday, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef }: Props) {
+export function WeekGrid({ days, showQuarterHours = true, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef }: Props) {
   const { t, i18n } = useTranslation(['edt', 'common']);
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const now = new Date();
 
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday]);
   const { start, end } = useMemo(() => axisBounds(slots, courses), [slots, courses]);
+  const quarters = useMemo(() => {
+    const marks: number[] = [];
+    for (let m = Math.ceil(start / 15) * 15; m < end; m += 15) if (m % 60 !== 0) marks.push(m);
+    return marks;
+  }, [start, end]);
   const height = (end - start) * PX_PER_MIN;
   const placedByDay = useMemo(() => {
     const byDay = new Map<string, Course[]>();
@@ -52,7 +59,7 @@ export function WeekGrid({ monday, courses, slots, teacherName, rbsName, subject
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '64px repeat(7, minmax(84px, 1fr))', minWidth: 652 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `64px repeat(${days.length}, minmax(84px, 1fr))`, minWidth: 64 + 84 * days.length }}>
         <div />
         {days.map((d) => (
           <div key={ymd(d)} className="text-center fw-bold pb-8" style={{ textTransform: 'capitalize', fontSize: 13 }}>
@@ -85,9 +92,18 @@ export function WeekGrid({ monday, courses, slots, teacherName, rbsName, subject
               <div
                 key={s.id}
                 aria-hidden
-                style={{ position: 'absolute', left: 0, right: 0, top: (minutesOfHour(s.startHour) - start) * PX_PER_MIN, borderTop: '1px dashed #e6e6e6' }}
+                style={{ position: 'absolute', left: 0, right: 0, top: (minutesOfHour(s.startHour) - start) * PX_PER_MIN, borderTop: '1px dashed #d9d9d9' }}
               />
             ))}
+            {showQuarterHours &&
+              quarters.map((m) => (
+                <div
+                  key={m}
+                  aria-hidden
+                  data-quarter
+                  style={{ position: 'absolute', left: 0, right: 0, top: (m - start) * PX_PER_MIN, borderTop: '1px dotted #f0f0f0' }}
+                />
+              ))}
             {(placedByDay.get(ymd(d)) ?? []).map(({ course: c, start: from, end: to, lane, lanes }) => {
               const tagged = (c.tags ?? []).length > 0;
               const past = isPast(c, now);
@@ -166,7 +182,7 @@ interface DetailsProps {
 }
 
 /** Détail d'un cours, contenu identique à l'infobulle AngularJS (template/calendar/course-tooltip.html). */
-function CourseDetails({ course: c, subject, from, to, teacherName, rbsName }: DetailsProps) {
+export function CourseDetails({ course: c, subject, from, to, teacherName, rbsName }: DetailsProps) {
   const { t } = useTranslation(['edt', 'common']);
   const teachers = (c.teacherIds ?? []).map(teacherName).filter(Boolean);
   const rooms = (c.roomLabels ?? []).filter((r) => r);

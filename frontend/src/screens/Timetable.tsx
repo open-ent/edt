@@ -6,14 +6,16 @@ import { useSearchParams } from 'react-router-dom';
 import { api, Course, Group } from '../api';
 import { composesOwnFilter, sortGroups } from '../context';
 import { FilterSidebar } from '../features/FilterSidebar';
+import { MonthGrid } from '../features/MonthGrid';
 import { WeekGrid } from '../features/WeekGrid';
 import { courseSubject } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
-import { addDays, courseSortKey, dayLabel, hhmm, mondayOf, weekLabel, ymd } from '../utils';
+import { initialAnchor, periodOf, step, ViewMode, VIEW_MODES } from '../period';
+import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
 
 
-/** Emploi du temps des classes, groupes et enseignants choisis, sur une semaine (grille ou liste). */
+/** Emploi du temps des classes, groupes et enseignants choisis : vue jour, semaine, quinzaine, mois ou liste. */
 export function Timetable() {
   const { t } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
@@ -28,14 +30,18 @@ export function Timetable() {
   const targetStart = searchParams.get('start');
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
-  const [monday, setMonday] = useState(() => {
+  // Date de référence de la période affichée ; un lien profond y place directement la bonne date.
+  const [anchor, setAnchor] = useState(() => {
     if (targetDate) {
       const d = new Date(`${targetDate}T00:00:00`);
-      if (!Number.isNaN(d.getTime())) return mondayOf(d);
+      if (!Number.isNaN(d.getTime())) return d;
     }
-    return mondayOf(new Date());
+    return initialAnchor(new Date());
   });
+  const [mode, setMode] = useState<ViewMode>('week');
   const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [showQuarterHours, setShowQuarterHours] = useState(true);
+  const period = useMemo(() => periodOf(mode, anchor), [mode, anchor]);
 
   const groupsQuery = useQuery({
     queryKey: ['edt', 'groups', structureId, isTeacher],
@@ -103,8 +109,15 @@ export function Timetable() {
   const slots = slotsQuery.data ?? [];
   const teacherName = (id: string) => teachersQuery.data?.find((x) => x.id === id)?.displayName;
 
-  const startAt = ymd(monday);
-  const endAt = ymd(addDays(monday, 6));
+  const short = (d: Date) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  const periodLabel =
+    mode === 'day'
+      ? anchor.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
+      : mode === 'month'
+        ? anchor.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+        : t('edt.timetable.period.range', { 0: short(period.first), 1: short(period.last) });
+  const startAt = ymd(period.first);
+  const endAt = ymd(period.last);
   const hasSelection = shownGroupIds.length > 0 || selection.teacherIds.length > 0;
   const filter = useMemo(
     () => coursesFilter(shownGroupIds, selection.teacherIds, classes, subGroups),
@@ -263,23 +276,59 @@ export function Timetable() {
             {t('edt.timetable.mine')}
           </button>
         )}
-        <div className="d-flex gap-8 align-items-center">
-          <button type="button" className="btn btn-secondary" onClick={() => setMonday((m) => addDays(m, -7))}>
-            {t('edt.week.prev', { defaultValue: '← Semaine précédente' })}
+        <div className="d-flex gap-8 align-items-center flex-wrap">
+          <button type="button" className="btn btn-secondary" onClick={() => setAnchor((d) => step(mode, d, -1))}>
+            {t('edt.timetable.nav.prev')}
           </button>
-          <span className="text-muted" style={{ minWidth: 150, textAlign: 'center' }}>{weekLabel(monday)}</span>
-          <button type="button" className="btn btn-secondary" onClick={() => setMonday((m) => addDays(m, 7))}>
-            {t('edt.week.next', { defaultValue: 'Semaine suivante →' })}
+          <button type="button" className="btn btn-secondary" onClick={() => setAnchor(initialAnchor(new Date()))}>
+            {t('edt.timetable.nav.today')}
           </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAnchor((d) => step(mode, d, 1))}>
+            {t('edt.timetable.nav.next')}
+          </button>
+          <input
+            type="date"
+            className="form-control"
+            style={{ width: 'auto' }}
+            aria-label={t('edt.timetable.nav.goto')}
+            value={ymd(anchor)}
+            onChange={(e) => {
+              const d = new Date(`${e.target.value}T00:00:00`);
+              if (!Number.isNaN(d.getTime())) setAnchor(d);
+            }}
+          />
+          <span className="text-muted" data-testid="edt-period" style={{ minWidth: 150 }}>{periodLabel}</span>
         </div>
         <div className="btn-group" role="group" aria-label={t('edt.view', { defaultValue: 'Affichage' })}>
-          <button type="button" className={`btn btn-${view === 'grid' ? 'primary' : 'secondary'}`} onClick={() => setView('grid')}>
-            {t('edt.view.grid', { defaultValue: 'Grille' })}
-          </button>
-          <button type="button" className={`btn btn-${view === 'list' ? 'primary' : 'secondary'}`} onClick={() => setView('list')}>
+          {VIEW_MODES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={view === 'grid' && mode === m}
+              className={`btn btn-${view === 'grid' && mode === m ? 'primary' : 'secondary'}`}
+              onClick={() => {
+                setMode(m);
+                setView('grid');
+              }}
+            >
+              {t(`edt.timetable.view.${m}`)}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={view === 'list'}
+            className={`btn btn-${view === 'list' ? 'primary' : 'secondary'}`}
+            onClick={() => setView('list')}
+          >
             {t('edt.view.list', { defaultValue: 'Liste' })}
           </button>
         </div>
+        {view === 'grid' && (mode === 'day' || mode === 'week') && (
+          <label className="d-flex align-items-center gap-4 m-0">
+            <input type="checkbox" checked={showQuarterHours} onChange={(e) => setShowQuarterHours(e.target.checked)} />
+            {t('edt.timetable.quarters')}
+          </label>
+        )}
       </div>
 
       {!hasSelection && (
@@ -289,14 +338,26 @@ export function Timetable() {
       {hasSelection && coursesQuery.isLoading && <p>{t('edt.loading', { defaultValue: 'Chargement…' })}</p>}
 
       {hasSelection && !coursesQuery.isLoading && courses.length === 0 && view === 'list' && (
-        <p className="text-muted">{t('edt.courses.empty', { defaultValue: 'Aucun cours sur cette semaine.' })}</p>
+        <p className="text-muted">{t('edt.timetable.courses.empty')}</p>
       )}
 
       {/* Vue GRILLE : semaine sur un axe horaire réel, cours simultanés côte à côte */}
-      {hasSelection && view === 'grid' && (
+      {hasSelection && view === 'grid' && (mode === 'fortnight' || mode === 'month') && (
+        <MonthGrid
+          days={period.days}
+          month={mode === 'month' ? anchor.getMonth() : undefined}
+          courses={courses}
+          teacherName={teacherName}
+          rbsName={(id) => rbsQuery.data?.get(id)}
+          subjectName={(id) => subjectName.get(id)}
+        />
+      )}
+
+      {hasSelection && view === 'grid' && (mode === 'day' || mode === 'week') && (
         <>
           <WeekGrid
-            monday={monday}
+            days={period.days}
+            showQuarterHours={showQuarterHours}
             courses={courses}
             slots={slots}
             teacherName={teacherName}
