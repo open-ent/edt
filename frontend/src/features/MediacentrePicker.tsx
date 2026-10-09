@@ -1,6 +1,6 @@
 import { Modal } from '@open-ent/react';
 import { useMutation } from '@tanstack/react-query';
-import { FormEvent, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '../api';
@@ -22,8 +22,7 @@ export function MediacentrePicker({ attached, onAdd, onClose }: Props) {
   const [query, setQuery] = useState('');
   const search = useMutation({ mutationFn: async (q: string) => parseMediacentreFrames(await api.searchMediacentre(q)) });
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
+  const launch = () => {
     if (query.trim()) search.mutate(query.trim());
   };
   const isAttached = (item: MediacentreItem) => {
@@ -35,7 +34,9 @@ export function MediacentrePicker({ attached, onAdd, onClose }: Props) {
     <Modal id={useId()} isOpen onModalClose={onClose} size="lg" scrollable>
       <Modal.Header onModalClose={onClose}>{t('edt.resources.add.mediacentre')}</Modal.Header>
       <Modal.Body>
-        <form className="d-flex gap-8 mb-12" onSubmit={onSubmit} role="search">
+        {/* Pas d'élément <form> : la fenêtre du socle est rendue hors de la racine React (#portal), et
+            sa soumission native rechargeait /edt sans ?ui=react — retour sur l'ancienne interface. */}
+        <div className="d-flex gap-8 mb-12" role="search">
           <input
             type="search"
             className="form-control"
@@ -43,11 +44,17 @@ export function MediacentrePicker({ attached, onAdd, onClose }: Props) {
             placeholder={t('edt.resources.mediacentre.search.placeholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                launch();
+              }
+            }}
           />
-          <button type="submit" className="btn btn-primary" disabled={!query.trim() || search.isPending}>
+          <button type="button" className="btn btn-primary" disabled={!query.trim() || search.isPending} onClick={launch}>
             {t('edt.resources.mediacentre.search')}
           </button>
-        </form>
+        </div>
         {search.isPending && <p role="status">{t('edt.resources.mediacentre.loading')}</p>}
         {search.isIdle && <p className="text-muted">{t('edt.resources.mediacentre.empty')}</p>}
         {search.isError && <p className="text-danger" role="alert">{t('edt.form.mediacentre.error')}</p>}
