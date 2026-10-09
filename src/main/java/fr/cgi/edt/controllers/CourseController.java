@@ -1,9 +1,12 @@
 package fr.cgi.edt.controllers;
 
 
+import fr.cgi.edt.security.EdtAccessIfMyStructure;
 import fr.cgi.edt.services.CourseService;
 import fr.cgi.edt.services.impl.DefaultCourseService;
 import fr.wseduc.rs.*;
+import fr.wseduc.security.ActionType;
+import fr.wseduc.security.SecuredAction;
 import fr.wseduc.webutils.request.RequestUtils;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
@@ -12,6 +15,7 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.entcore.common.controller.ControllerHelper;
+import org.entcore.common.http.filter.ResourceFilter;
 import org.entcore.common.user.UserUtils;
 
 import java.text.ParseException;
@@ -33,6 +37,8 @@ public class CourseController extends ControllerHelper {
 
     @Post("/structures/:structureId/common/courses/:startAt/:endAt")
     @ApiDoc("get courses")
+    @SecuredAction(value = "", type = ActionType.RESOURCE)
+    @ResourceFilter(EdtAccessIfMyStructure.class)
     public void getCourses(final HttpServerRequest request) {
         RequestUtils.bodyToJson(request, event -> {
             final String structureId = request.getParam("structureId");
@@ -61,6 +67,8 @@ public class CourseController extends ControllerHelper {
     // Consommé par RBS pour avertir d'un conflit avec l'emploi du temps avant une réservation.
     @Get("/structures/:structureId/room-conflicts/:startAt/:endAt")
     @ApiDoc("Cours EDT existants dans une salle donnée sur une période (détection de conflit avant une réservation RBS).")
+    @SecuredAction(value = "", type = ActionType.RESOURCE)
+    @ResourceFilter(EdtAccessIfMyStructure.class)
     public void getRoomConflicts(final HttpServerRequest request) {
         final String structureId = request.getParam("structureId");
         final String startAt = request.getParam("startAt");
