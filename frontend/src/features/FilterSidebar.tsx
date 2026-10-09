@@ -12,6 +12,12 @@ interface Props {
   onChange: (selection: Selection) => void;
 }
 
+/**
+ * Titre de section dans la police du texte courant : la police de titre du thème (h2) est trop
+ * fine à cette taille, ex. « CLASSES / GROUPES » peu lisible avec le thème 1d.
+ */
+const SECTION_TITLE = { fontSize: 15, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.03em' };
+
 /** Teinte des groupes ajoutés par leur classe sans couleur propre au référentiel. */
 const SUBGROUP_COLOR = 'rgba(22, 46, 174, 0.7)';
 
@@ -51,11 +57,11 @@ export function FilterSidebar({ groups, subGroups, teachers, selection, onChange
     <aside className="card p-12" aria-label={t('edt.timetable.filter.title')} style={{ minWidth: 220 }}>
       {selection.teacherIds.length > 0 && (
         <section className="mb-16">
-          <h2 style={{ fontSize: 14, textTransform: 'uppercase' }} className="mb-8">{t('edt.timetable.filter.teachers')}</h2>
+          <div role="heading" aria-level={2} style={SECTION_TITLE} className="mb-8">{t('edt.timetable.filter.teachers')}</div>
           <ul className="list-unstyled m-0">
             {selection.teacherIds.map((id) => (
               <li key={id} className="d-flex align-items-center justify-content-between mb-4">
-                <span style={{ fontSize: 13 }}>{teacherName(id)}</span>
+                <span style={{ fontSize: 15 }}>{teacherName(id)}</span>
                 <button
                   type="button"
                   className="btn btn-link p-0"
@@ -71,7 +77,7 @@ export function FilterSidebar({ groups, subGroups, teachers, selection, onChange
       )}
 
       <section>
-        <h2 style={{ fontSize: 14, textTransform: 'uppercase' }} className="mb-8">{t('edt.timetable.filter.title')}</h2>
+        <div role="heading" aria-level={2} style={SECTION_TITLE} className="mb-8">{t('edt.timetable.filter.title')}</div>
         <div className="d-flex gap-8 mb-8 flex-wrap">
           <button
             type="button"
@@ -105,7 +111,7 @@ export function FilterSidebar({ groups, subGroups, teachers, selection, onChange
 
       {extraGroups.length > 0 && (
         <section className="mt-16">
-          <h2 style={{ fontSize: 14, textTransform: 'uppercase' }} className="mb-8">{t('edt.timetable.filter.subgroups')}</h2>
+          <div role="heading" aria-level={2} style={SECTION_TITLE} className="mb-8">{t('edt.timetable.filter.subgroups')}</div>
           {extraGroups.map((g) => (
             <button
               key={g.id}

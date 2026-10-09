@@ -110,10 +110,15 @@ export function Timetable() {
     () => coursesFilter(shownGroupIds, selection.teacherIds, classes, subGroups),
     [shownGroupIds, selection.teacherIds, classes, subGroups],
   );
+  // Attendre de connaître les groupes des classes choisies avant de lire les cours : sinon un
+  // premier affichage montre la classe sans ses groupes (ex. 602 sans GARRESPAFFECTATION), puis
+  // un second la complète — deux lectures et un emploi du temps qui « saute ».
+  const subGroupsPending = chosenClassIds.length > 0 && (subGroupsQuery.isPending || subGroupsQuery.isPlaceholderData);
   const coursesQuery = useQuery({
     queryKey: ['edt', 'courses', structureId, filter, startAt, endAt],
     queryFn: () => api.getCourses(structureId, filter, startAt, endAt),
-    enabled: !!structureId && hasSelection,
+    enabled: !!structureId && hasSelection && !subGroupsPending,
+    placeholderData: (previous) => previous,
   });
 
   const courses = [...(coursesQuery.data ?? [])].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
