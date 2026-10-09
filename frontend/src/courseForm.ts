@@ -133,3 +133,66 @@ export function prefillTimes(draft: CourseDraft, slots: TimeSlot[], date: string
   const hh = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   return { ...draft, date, freeSchedule: true, startTime: hh(start), endTime: hh(Math.min(start + 60, 23 * 60 + 45)) };
 }
+
+/** Cours existant tel que renvoyé par GET /edt/courses/:id (champs utiles au formulaire). */
+export interface StoredCourse {
+  _id: string;
+  structureId?: string;
+  teacherIds?: string[];
+  classesIds?: string[];
+  groupsIds?: string[];
+  classes?: string[];
+  groups?: string[];
+  subjectId?: string | null;
+  exceptionnal?: string | null;
+  startDate: string;
+  endDate: string;
+  idStartSlot?: string | null;
+  idEndSlot?: string | null;
+  tagIds?: number[] | null;
+  rbsResourceIds?: number[] | null;
+  rbsBookingIds?: number[] | null;
+  resources?: CourseResource[] | null;
+  roomLabels?: string[] | null;
+  recurrence?: string | null;
+}
+
+/**
+ * Reprend un cours existant dans le formulaire : classes et groupes retrouvés par identifiant (à
+ * défaut par nom), plage nommée si le cours en a une, sinon horaire libre.
+ * Ex. cours 401, 2026-10-12 08:00-12:00 sans plage → horaire libre 08:00-12:00.
+ */
+export function draftFromCourse(course: StoredCourse, groups: Group[], slots: TimeSlot[]): CourseDraft {
+  const ids = [...(course.classesIds ?? []), ...(course.groupsIds ?? [])];
+  const names = [...(course.classes ?? []), ...(course.groups ?? [])];
+  const matched = groups.filter((g) => ids.includes(g.id) || (!ids.length && names.includes(g.name)));
+  const hasSlots = !!course.idStartSlot && slots.some((s) => s.id === course.idStartSlot) && slots.some((s) => s.id === course.idEndSlot);
+  const hhmm = (date: string) => date.replace(' ', 'T').slice(11, 16);
+  return {
+    ...emptyDraft(course.structureId ?? ''),
+    teacherIds: course.teacherIds ?? [],
+    groups: matched,
+    subjectId: course.subjectId ?? '',
+    isExceptional: !!course.exceptionnal,
+    exceptional: course.exceptionnal ?? '',
+    date: course.startDate.slice(0, 10),
+    freeSchedule: !hasSlots,
+    startSlotId: hasSlots ? course.idStartSlot! : '',
+    endSlotId: hasSlots ? course.idEndSlot! : '',
+    startTime: hasSlots ? '' : hhmm(course.startDate),
+    endTime: hasSlots ? '' : hhmm(course.endDate),
+    tagId: course.tagIds?.[0] ?? undefined,
+    rbsResourceIds: course.rbsResourceIds ?? [],
+    roomLabels: course.roomLabels ?? [],
+    resources: course.resources ?? [],
+  };
+}
+
+/**
+ * Un cours peut-il encore être modifié ? Comme l'AngularJS (isNotPast) : jusqu'à 15 minutes avant
+ * son début. Ex. cours de 10:00 → modifiable jusqu'à 09:45.
+ */
+export function isEditable(startDate: string, now: Date): boolean {
+  const start = new Date(startDate.replace(' ', 'T')).getTime();
+  return !Number.isNaN(start) && start - 15 * 60_000 > now.getTime();
+}

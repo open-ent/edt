@@ -240,12 +240,40 @@ public class EdtServiceMongoImpl extends MongoDbCrudService implements EdtServic
 
     @Override
     public void deleteCourse(String id, Handler<Either<String, JsonObject>> handler) {
-        super.delete(id, handler);
+        deleteWithBookings(new JsonObject().put(Field._ID, id), handler);
     }
 
     @Override
     public void deleteRecurrence(String id, Handler<Either<String, JsonObject>> handler) {
-        MongoDb.getInstance().delete(this.collection, matcherFutureRecurrence(id), MongoDbResult.validResultHandler(handler));
+        deleteWithBookings(matcherFutureRecurrence(id), handler);
+    }
+
+    /**
+     * Supprime les cours ciblés et renvoie, sous rbsBookingIds, les réservations RBS qu'ils
+     * portaient, pour que l'appelant les libère (sinon la salle reste réservée pour rien).
+     * Ex. série du lundi, 3 occurrences à venir réservant la salle 201 → {"rbsBookingIds":[41,42,43]}.
+     */
+    private void deleteWithBookings(JsonObject matcher, Handler<Either<String, JsonObject>> handler) {
+        MongoDb.getInstance().find(this.collection, matcher, found -> {
+            JsonArray bookingIds = "ok".equals(found.body().getString("status"))
+                    ? collectBookingIds(found.body().getJsonArray("results", new JsonArray()))
+                    : new JsonArray();
+            MongoDb.getInstance().delete(this.collection, matcher, MongoDbResult.validResultHandler(result -> {
+                if (result.isRight()) result.right().getValue().put(Field.RBS_BOOKING_IDS, bookingIds);
+                handler.handle(result);
+            }));
+        });
+    }
+
+    /** Réservations RBS de plusieurs cours, sans doublon. Ex. [{rbsBookingIds:[1,2]},{rbsBookingIds:[2]},{}] → [1,2]. */
+    static JsonArray collectBookingIds(JsonArray courses) {
+        JsonArray ids = new JsonArray();
+        for (int i = 0; i < courses.size(); i++) {
+            JsonArray own = courses.getJsonObject(i).getJsonArray(Field.RBS_BOOKING_IDS);
+            if (own == null) continue;
+            for (Object bookingId : own) if (bookingId != null && !ids.contains(bookingId)) ids.add(bookingId);
+        }
+        return ids;
     }
 
     private JsonObject matcherFutureRecurrence(String id) {

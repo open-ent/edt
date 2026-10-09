@@ -506,7 +506,7 @@ public class EdtController extends MongoDbControllerHelper {
     @Trace("DELETE_COURSE")
     public void deleteCourse(HttpServerRequest request) {
         String id = request.getParam("id");
-        edtService.deleteCourse(id, defaultResponseHandler(request));
+        UserUtils.getUserInfos(eb, request, user -> edtService.deleteCourse(id, releaseBookingsThen(request, user)));
     }
 
     @Delete("/courses/recurrences/:id")
@@ -515,6 +515,21 @@ public class EdtController extends MongoDbControllerHelper {
     @Trace("DELETE_RECURRENCE")
     public void deleteRecurrence(HttpServerRequest request) {
         String id = request.getParam("id");
-        edtService.deleteRecurrence(id, defaultResponseHandler(request));
+        UserUtils.getUserInfos(eb, request, user -> edtService.deleteRecurrence(id, releaseBookingsThen(request, user)));
+    }
+
+    /**
+     * Après suppression de cours, libère leurs réservations RBS (salles, matériel) puis répond.
+     * Ex. suppression du cours du 12/10 en salle 201 → la salle 201 redevient libre ce jour-là.
+     */
+    private Handler<Either<String, JsonObject>> releaseBookingsThen(HttpServerRequest request, UserInfos user) {
+        return result -> {
+            if (result.isRight()) {
+                JsonArray bookingIds = (JsonArray) result.right().getValue().remove(Field.RBS_BOOKING_IDS);
+                if (bookingIds != null && !bookingIds.isEmpty())
+                    RbsBridgeService.deleteBookings(eb, bookingIds, user != null ? user.getUserId() : null);
+            }
+            defaultResponseHandler(request).handle(result);
+        };
     }
 }

@@ -3,12 +3,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { api, childClasses } from '../api';
+import { api, childClasses, Course } from '../api';
 import { ALL_STRUCTURES, composesOwnFilter, sortGroups } from '../context';
+import { DeleteCourseDialog } from '../features/DeleteCourseDialog';
 import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
 import { SearchBox } from '../features/SearchBox';
-import { WeekGrid } from '../features/WeekGrid';
+import { CourseActions, WeekGrid } from '../features/WeekGrid';
 import { courseSubject } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection, toggleGroup } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
@@ -19,7 +20,7 @@ import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
 
 /** Emploi du temps des classes, groupes et enseignants choisis : vue jour, semaine, quinzaine, mois ou liste. */
 export function Timetable() {
-  const { t } = useTranslation(['edt', 'common']);
+  const { t, i18n } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
   const navigate = useNavigate();
   // Retour du formulaire : ressource RBS non réservée (créneau déjà pris), cf. CourseForm.
@@ -187,6 +188,10 @@ export function Timetable() {
     if (highlightCourse) highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlightCourse]);
 
+  // Modifier / supprimer depuis le détail d'un cours : gestionnaires, sur un établissement précis.
+  const [toDelete, setToDelete] = useState<Course | null>(null);
+  const actions: CourseActions | undefined =
+    ctx.canManage && !ctx.allStructures ? { onEdit: (c) => navigate(`/edit/${c._id}`), onDelete: setToDelete } : undefined;
 
   if (ctx.ready && ctx.structures.length === 0) {
     return (
@@ -359,6 +364,7 @@ export function Timetable() {
           teacherName={teacherName}
           rbsName={(id) => rbsQuery.data?.get(id)}
           subjectName={(id) => subjectName.get(id)}
+          actions={actions}
         />
       )}
 
@@ -367,6 +373,7 @@ export function Timetable() {
           <WeekGrid
             days={period.days}
             showQuarterHours={showQuarterHours}
+            actions={actions}
             courses={courses}
             slots={slots}
             teacherName={teacherName}
@@ -418,6 +425,13 @@ export function Timetable() {
       )}
         </div>
       </div>
+      {toDelete && (
+        <DeleteCourseDialog
+          course={toDelete}
+          label={`${courseSubject(toDelete, (id) => subjectName.get(id))} — ${new Date(toDelete.startDate.replace(' ', 'T')).toLocaleDateString(i18n.language || 'fr', { weekday: 'long', day: 'numeric', month: 'long' })} ${hhmm(toDelete.startDate)}`}
+          onClose={() => setToDelete(null)}
+        />
+      )}
     </div>
   );
 }

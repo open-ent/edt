@@ -1,3 +1,4 @@
+import type { StoredCourse } from './courseForm';
 import type { RbsResource } from './rbs';
 
 // Client REST du module Emploi du temps (edt) — session ENT, même origine, mêmes routes que l'IHM
@@ -310,15 +311,22 @@ const isRealBooking = (b: { is_periodic?: boolean; parent_booking_id?: number | 
  * réservations RBS de la ressource. Ex. « Salle 201 » le 12/10 de 08:00 à 09:00.
  * Dates « YYYY-MM-DDTHH:mm:ss » ; ignore les erreurs (avertissement non bloquant).
  */
-export const isResourceBusy = async (structureId: string, resource: { id: number; name: string }, start: string, end: string): Promise<boolean> => {
+export const isResourceBusy = async (
+  structureId: string,
+  resource: { id: number; name: string },
+  start: string,
+  end: string,
+  /** Le cours modifié et ses propres réservations ne comptent pas (on ne s'avertit pas soi-même). */
+  own: { courseId?: string; bookingIds?: number[] } = {},
+): Promise<boolean> => {
   const edt = await fetch(`/edt/structures/${structureId}/room-conflicts/${start}/${end}?room=${encodeURIComponent(resource.name)}`, base)
     .then((r) => (r.ok ? r.json() : []))
     .catch(() => []);
-  if (Array.isArray(edt) && edt.length > 0) return true;
+  if (Array.isArray(edt) && edt.some((c: { _id?: string }) => c._id !== own.courseId)) return true;
   const rbs = await fetch(`/rbs/resource/${resource.id}/booking-conflicts/${start}/${end}`, base)
     .then((r) => (r.ok ? r.json() : []))
     .catch(() => []);
-  return Array.isArray(rbs) && rbs.some(isRealBooking);
+  return Array.isArray(rbs) && rbs.some((b: { id?: number; is_periodic?: boolean; parent_booking_id?: number | null }) => isRealBooking(b) && !(own.bookingIds ?? []).includes(b.id ?? -1));
 };
 
 // ── Médiacentre (documents attachés au cours) ──────────────────────────────────
@@ -337,6 +345,31 @@ export const searchMediacentre = async (query: string): Promise<unknown[]> => {
   if (!res.ok) throw new Error(String(res.status));
   const body = (await res.json()) as unknown[] | null;
   return Array.isArray(body) ? body : [];
+};
+
+// ── Cours existant : lecture, modification, suppression ─────────────────────────
+/** Cours complet (avec ressources, réservations liées…), absent de la grille. */
+export const getCourse = async (id: string): Promise<StoredCourse> => json<StoredCourse>(await fetch(`/edt/courses/${id}`, base));
+
+/**
+ * Modifie UNE occurrence (« ce cours seulement » de l'AngularJS) ; les autres occurrences de la
+ * série ne bougent pas. Passe par PUT /edt/course (tableau) et non PUT /edt/courses/:id : seule
+ * cette route déplace aussi les réservations RBS (anciennes supprimées, nouvelles créées) et
+ * notifie la modification. Ex. passer le cours du 12/10 de la salle 201 à la salle 105.
+ */
+export const updateCourse = async (id: string, course: Record<string, unknown>): Promise<{ rbsConflicts?: Array<{ conflictResourceIds?: number[] }> } | null> =>
+  json(await fetch('/edt/course', { ...base, method: 'PUT', headers: mutHeaders(), body: JSON.stringify([{ ...course, _id: id }]) }));
+
+/** Supprime une occurrence. */
+export const deleteCourse = async (id: string): Promise<void> => {
+  const res = await fetch(`/edt/courses/${id}`, { ...base, method: 'DELETE', headers: mutHeaders() });
+  if (!res.ok) throw new Error(String(res.status));
+};
+
+/** Supprime toutes les occurrences À VENIR d'une série (les passées restent). */
+export const deleteRecurrence = async (recurrence: string): Promise<void> => {
+  const res = await fetch(`/edt/courses/recurrences/${recurrence}`, { ...base, method: 'DELETE', headers: mutHeaders() });
+  if (!res.ok) throw new Error(String(res.status));
 };
 
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
@@ -427,6 +460,10 @@ export const api = {
   getRoomCategory,
   isResourceBusy,
   searchMediacentre,
+  getCourse,
+  updateCourse,
+  deleteCourse,
+  deleteRecurrence,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,

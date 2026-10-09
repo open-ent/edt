@@ -2,11 +2,11 @@ import { MediaLibrary, useEdificeClient, useMediaLibrary } from '@open-ent/react
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { api, Group } from '../api';
 import { sortGroups } from '../context';
-import { CourseDraft, DraftError, effectiveTimes, emptyDraft, prefillTimes, toCoursePayload, validateDraft } from '../courseForm';
+import { CourseDraft, draftFromCourse, DraftError, effectiveTimes, emptyDraft, isEditable, prefillTimes, toCoursePayload, validateDraft } from '../courseForm';
 import { MediacentrePicker } from '../features/MediacentrePicker';
 import { MultiPicker } from '../features/MultiPicker';
 import { addResources, PickedFile, workspaceResource } from '../resources';
@@ -21,6 +21,8 @@ import { ymd } from '../utils';
  * l'emploi du temps affiché), matière — celles des enseignants d'abord —, ou matière personnalisée,
  * date, plage nommée ou horaire libre, étiquette.
  * Ouvert depuis un créneau vide de la grille : #/create?date=2026-10-12&minutes=600 (10:00).
+ * Modification d'un cours existant (route /edit/:id) : même formulaire, pré-rempli avec le cours ;
+ * pour un cours d'une série, seule cette occurrence est modifiée (la série entière : à venir).
  */
 export function CourseForm() {
   const { t } = useTranslation(['edt', 'common']);
@@ -33,6 +35,9 @@ export function CourseForm() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [params] = useSearchParams();
+  const { id: editId } = useParams();
+  const courseQuery = useQuery({ queryKey: ['edt', 'course', editId], queryFn: () => api.getCourse(editId!), enabled: !!editId });
+  const stored = courseQuery.data;
   const { selection, anchor } = useTimetableState();
   const structureId = ctx.structure?.id ?? ctx.structures[0]?.id ?? '';
   const isTeacher = ctx.profile === 'teacher';
@@ -53,6 +58,13 @@ export function CourseForm() {
   // du temps, créneau cliqué (ou le quart d'heure suivant sur le jour consulté).
   useEffect(() => {
     if (initialized || !structureId || !groupsQuery.data || !slotsQuery.data) return;
+    if (editId) {
+      // Modification : le cours lui-même, pas la sélection de l'emploi du temps.
+      if (!stored) return;
+      setDraft(draftFromCourse({ ...stored, structureId: stored.structureId ?? structureId }, groups, slotsQuery.data));
+      setInitialized(true);
+      return;
+    }
     const date = params.get('date') ?? ymd(anchor < new Date() ? new Date() : anchor);
     const now = new Date();
     const minutes = params.get('minutes') !== null ? Number(params.get('minutes')) : Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 15) * 15;
@@ -66,7 +78,7 @@ export function CourseForm() {
       ),
     );
     setInitialized(true);
-  }, [initialized, structureId, groupsQuery.data, slotsQuery.data, groups, selection, anchor, params]);
+  }, [initialized, structureId, groupsQuery.data, slotsQuery.data, groups, selection, anchor, params, editId, stored]);
 
   // Matières des enseignants choisis, en tête de liste ; la première est présélectionnée.
   const teacherSubjectsQuery = useQuery({
@@ -103,10 +115,17 @@ export function CourseForm() {
   const mismatched = mismatchedResources(selectedRbs, requiredCategory);
   const times = effectiveTimes(draft, slots);
   const busyQuery = useQuery({
-    queryKey: ['edt', 'rbs-busy', structureId, draft.rbsResourceIds, draft.date, times?.start, times?.end],
+    queryKey: ['edt', 'rbs-busy', structureId, draft.rbsResourceIds, draft.date, times?.start, times?.end, editId],
     queryFn: async () => {
       const busy = await Promise.all(
-        selectedRbs.map(async (r) => ((await api.isResourceBusy(structureId, r, `${draft.date}T${times!.start}:00`, `${draft.date}T${times!.end}:00`)) ? r.name : null)),
+        selectedRbs.map(async (r) => ((await api.isResourceBusy(structureId, r, `${draft.date}T${times!.start}:00`, `${draft.date}T${times!.end}:00`, {
+            // En modification, le cours et ses propres réservations ne sont pas des conflits.
+            courseId: editId,
+            bookingIds: stored?.rbsBookingIds ?? [],
+          }))
+            ? r.name
+            : null),
+        ),
       );
       return busy.filter((x): x is string => !!x);
     },
@@ -124,9 +143,13 @@ export function CourseForm() {
 
   const errors = validateDraft(draft, slots, new Date());
   const create = useMutation({
-    mutationFn: () => api.createCourses([toCoursePayload(draft, slots, user?.login ?? '', new Date())]),
+    mutationFn: () => {
+      const payload = toCoursePayload(draft, slots, user?.login ?? '', new Date());
+      return editId ? api.updateCourse(editId, payload) : api.createCourses([payload]);
+    },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['edt', 'courses'] });
+      if (editId) qc.removeQueries({ queryKey: ['edt', 'course', editId] });
       // Cours enregistré, mais une ressource RBS n'a pas pu être réservée (créneau déjà pris) :
       // on le dit sur l'emploi du temps au lieu de l'ignorer.
       const ids = [...new Set((result?.rbsConflicts ?? []).flatMap((c) => c.conflictResourceIds ?? []))];
@@ -159,10 +182,23 @@ export function CourseForm() {
   if (ctx.ready && !ctx.canManage) {
     return <div className="alert alert-warning" role="alert">{t('edt.form.forbidden')}</div>;
   }
+  if (editId && courseQuery.isError) {
+    return <div className="alert alert-danger" role="alert">{t('edt.form.edit.notfound')}</div>;
+  }
+  if (editId && stored && !isEditable(stored.startDate, new Date())) {
+    return (
+      <div className="alert alert-warning" role="alert">
+        {t('edt.cantDelete.courses.before')}{' '}
+        <button type="button" className="btn btn-sm btn-secondary ms-8" onClick={() => navigate('/')}>{t('edt.cancel')}</button>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate aria-labelledby="edt-course-form-title" style={{ maxWidth: 860 }}>
-      <h1 id="edt-course-form-title" className="mb-16">{t('edt.course.new')}</h1>
+      <h1 id="edt-course-form-title" className="mb-16">{t(editId ? 'edt.schedule.update' : 'edt.course.new')}</h1>
+      {editId && !initialized && <p role="status">{t('edt.form.edit.loading')}</p>}
+      {stored?.recurrence && <div className="alert alert-info" role="status">{t('edt.form.edit.occurrence')}</div>}
 
       <div className="card p-16 mb-16">
         <MultiPicker
@@ -373,11 +409,13 @@ export function CourseForm() {
           <ul className="m-0">{errors.map((e) => <li key={e}>{errorText[e]}</li>)}</ul>
         </div>
       )}
-      {create.isError && <div className="alert alert-danger" role="alert">{t('edt.form.error.server')}</div>}
+      {create.isError && <div className="alert alert-danger" role="alert">{t(editId ? 'edt.form.error.server.update' : 'edt.form.error.server')}</div>}
 
       <div className="d-flex gap-8 justify-content-end">
         <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>{t('edt.cancel')}</button>
-        <button type="submit" className="btn btn-primary" disabled={create.isPending}>{t('edt.course.create')}</button>
+        <button type="submit" className="btn btn-primary" disabled={create.isPending || (!!editId && !initialized)}>
+          {t(editId ? 'edt.utils.save' : 'edt.course.create')}
+        </button>
       </div>
     </form>
   );

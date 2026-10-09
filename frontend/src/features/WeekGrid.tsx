@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { Course, TimeSlot } from '../api';
 import { groupColor, textOn } from '../colors';
+import { isEditable } from '../courseForm';
 import { axisBounds, courseSubject, dayOf, isPast, minutesOf, minutesOfHour, placeDay } from '../grid';
 import { ymd } from '../utils';
 
@@ -16,6 +17,8 @@ interface Props {
   days: Date[];
   /** Repères tous les quarts d'heure (option d'affichage, active par défaut comme l'AngularJS). */
   showQuarterHours?: boolean;
+  /** Actions du détail d'un cours (gestionnaires seulement), cf. CourseActions. */
+  actions?: CourseActions;
   courses: Course[];
   slots: TimeSlot[];
   teacherName: (id: string) => string | undefined;
@@ -37,7 +40,7 @@ const hhmm = (minutes: number) =>
  * masqué). Survol ou clic sur un cours → détail (horaire, enseignants, classes, salles, ressources
  * RBS, étiquettes). Ex. deux cours de 08:00 à 09:00 le lundi → deux colonnes côte à côte.
  */
-export function WeekGrid({ days, showQuarterHours = true, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt }: Props) {
+export function WeekGrid({ days, showQuarterHours = true, actions, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt }: Props) {
   const { t, i18n } = useTranslation(['edt', 'common']);
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -82,6 +85,16 @@ export function WeekGrid({ days, showQuarterHours = true, courses, slots, teache
               {s.startHour}
             </div>
           ))}
+          {/* Graduations des quarts d'heure sur l'axe, ex. un tiret à 08:15, plus long à 08:30. */}
+          {showQuarterHours &&
+            quarters.map((m) => (
+              <div
+                key={m}
+                aria-hidden
+                data-quarter-tick
+                style={{ position: 'absolute', right: 0, width: m % 30 === 0 ? 10 : 5, top: (m - start) * PX_PER_MIN, borderTop: '1px solid #8f99a8' }}
+              />
+            ))}
         </div>
 
         {days.map((d) => (
@@ -115,14 +128,14 @@ export function WeekGrid({ days, showQuarterHours = true, courses, slots, teache
                   key={m}
                   aria-hidden
                   data-quarter
-                  // Visibles sur fond blanc (l'ancien #f0f0f0 rendait la case « Quarts d'heure »
-                  // sans effet apparent) ; la demi-heure un peu plus marquée que les quarts.
+                  // Nettement plus foncés que les traits de plage (#d9d9d9) : sinon cocher la case
+                  // « Quarts d'heure » ne change rien à l'œil. Ex. 08:30 tireté, 08:15 / 08:45 pointillé.
                   style={{
                     position: 'absolute',
                     left: 0,
                     right: 0,
                     top: (m - start) * PX_PER_MIN,
-                    borderTop: m % 30 === 0 ? '1px dashed #c4c9d1' : '1px dotted #d3d7de',
+                    borderTop: m % 30 === 0 ? '1px dashed #8f99a8' : '1px dotted #a7b0bd',
                     pointerEvents: 'none',
                   }}
                 />
@@ -183,6 +196,9 @@ export function WeekGrid({ days, showQuarterHours = true, courses, slots, teache
                       to={hhmm(to)}
                       teacherName={teacherName}
                       rbsName={rbsName}
+                      actions={actions}
+                      // Cours de seconde moitié de journée : détail au-dessus, sinon il sort de la grille.
+                      above={from - start > (end - start) / 2}
                     />
                   )}
                 </div>
@@ -202,10 +218,19 @@ interface DetailsProps {
   to: string;
   teacherName: (id: string) => string | undefined;
   rbsName: (id: number) => string | undefined;
+  actions?: CourseActions;
+  /** Ouvrir le détail au-dessus du cours plutôt qu'en dessous. */
+  above?: boolean;
+}
+
+/** Modifier / supprimer depuis le détail d'un cours ; absent pour qui ne gère pas les cours. */
+export interface CourseActions {
+  onEdit: (course: Course) => void;
+  onDelete: (course: Course) => void;
 }
 
 /** Détail d'un cours, contenu identique à l'infobulle AngularJS (template/calendar/course-tooltip.html). */
-export function CourseDetails({ course: c, subject, from, to, teacherName, rbsName }: DetailsProps) {
+export function CourseDetails({ course: c, subject, from, to, teacherName, rbsName, actions, above = false }: DetailsProps) {
   const { t } = useTranslation(['edt', 'common']);
   const teachers = (c.teacherIds ?? []).map(teacherName).filter(Boolean);
   const rooms = (c.roomLabels ?? []).filter((r) => r);
@@ -215,7 +240,16 @@ export function CourseDetails({ course: c, subject, from, to, teacherName, rbsNa
     <div
       role="tooltip"
       className="card shadow p-8"
-      style={{ position: 'absolute', top: '100%', left: 0, minWidth: 220, marginTop: 4, background: '#fff', color: '#222', fontSize: 13, zIndex: 30 }}
+      style={{
+        position: 'absolute',
+        ...(above ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
+        left: 0,
+        minWidth: 220,
+        background: '#fff',
+        color: '#222',
+        fontSize: 13,
+        zIndex: 30,
+      }}
     >
       <div className="fw-bold mb-4" style={{ borderLeft: `4px solid ${groupColor(c.color)}`, paddingLeft: 6 }}>{subject}</div>
       <div>{from} – {to}</div>
@@ -226,6 +260,16 @@ export function CourseDetails({ course: c, subject, from, to, teacherName, rbsNa
       {rooms.length > 0 && <div>{t('edt.utils.room')} : {rooms.join(', ')}</div>}
       {resources.length > 0 && <div>{t('edt.utils.resource')} : {resources.join(', ')}</div>}
       {tags.length > 0 && <div>{tags.join(', ')}</div>}
+      {/* Comme l'AngularJS : plus de modification ni de suppression 15 minutes avant le début. */}
+      {actions &&
+        (isEditable(c.startDate, new Date()) ? (
+          <div className="d-flex gap-8 mt-8">
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => actions.onEdit(c)}>{t('edt.utils.modify')}</button>
+            <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => actions.onDelete(c)}>{t('edt.utils.delete')}</button>
+          </div>
+        ) : (
+          <div className="text-muted mt-8" style={{ fontSize: 12 }}>{t('edt.cantDelete.courses.before')}</div>
+        ))}
     </div>
   );
 }

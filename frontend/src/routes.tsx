@@ -11,6 +11,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Timetable /> },
       { path: 'create', element: <CourseForm /> },
+      { path: 'edit/:id', element: <CourseForm key="edit" /> },
     ],
   },
 ];

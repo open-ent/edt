@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Group, TimeSlot } from './api';
-import { CourseDraft, effectiveTimes, emptyDraft, prefillTimes, toCoursePayload, validateDraft } from './courseForm';
+import { CourseDraft, draftFromCourse, effectiveTimes, emptyDraft, isEditable, prefillTimes, toCoursePayload, validateDraft } from './courseForm';
 
 const slots: TimeSlot[] = [
   { id: 'M1', name: 'M1', startHour: '08:00', endHour: '09:00' },
@@ -102,5 +102,30 @@ describe('pré-remplissage au clic sur un créneau vide', () => {
 
   it('hors plage : horaire libre arrondi au quart d’heure, une heure', () => {
     expect(prefillTimes(valid, slots, '2026-10-13', 14 * 60 + 20)).toMatchObject({ freeSchedule: true, startTime: '14:15', endTime: '15:15' });
+  });
+});
+
+describe('reprise d’un cours existant', () => {
+  const groups = [g('c4a', '4A', 0, 'EXT4A'), g('g1', '4A grp1', 1)];
+
+  it('retrouve classes et groupes par identifiant, plage nommée conservée', () => {
+    const d = draftFromCourse(
+      { _id: 'x', structureId: 'S1', teacherIds: ['t1'], classesIds: ['c4a'], groupsIds: ['g1'], subjectId: 'maths', startDate: '2026-10-12T08:00:00', endDate: '2026-10-12T10:00:00', idStartSlot: 'M1', idEndSlot: 'M2', tagIds: [4], rbsResourceIds: [12] },
+      groups,
+      slots,
+    );
+    expect(d).toMatchObject({ teacherIds: ['t1'], subjectId: 'maths', date: '2026-10-12', freeSchedule: false, startSlotId: 'M1', endSlotId: 'M2', tagId: 4, rbsResourceIds: [12] });
+    expect(d.groups.map((x) => x.id)).toEqual(['c4a', 'g1']);
+  });
+
+  it('sans plage connue : horaire libre ; matière personnalisée reprise ; repli par nom', () => {
+    const d = draftFromCourse({ _id: 'x', classes: ['4A'], exceptionnal: 'Sortie', startDate: '2026-10-12 13:30:00', endDate: '2026-10-12 15:00:00' }, groups, slots);
+    expect(d).toMatchObject({ freeSchedule: true, startTime: '13:30', endTime: '15:00', isExceptional: true, exceptional: 'Sortie' });
+    expect(d.groups.map((x) => x.name)).toEqual(['4A']);
+  });
+
+  it('modifiable jusqu’à 15 minutes avant le début', () => {
+    expect(isEditable('2026-10-09T12:20:00', NOW)).toBe(true);
+    expect(isEditable('2026-10-09T12:10:00', NOW)).toBe(false);
   });
 });

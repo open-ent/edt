@@ -5,7 +5,7 @@ import type { Course } from '../api';
 import { groupColor, textOn } from '../colors';
 import { courseSubject, dayOf, isPast, minutesOf } from '../grid';
 import { ymd } from '../utils';
-import { CourseDetails } from './WeekGrid';
+import { CourseActions, CourseDetails } from './WeekGrid';
 
 interface Props {
   /** Jours affichés, par semaines entières (14 en quinzaine, 28 à 42 en mois). */
@@ -16,6 +16,7 @@ interface Props {
   teacherName: (id: string) => string | undefined;
   rbsName: (id: number) => string | undefined;
   subjectName: (id: string) => string | undefined;
+  actions?: CourseActions;
 }
 
 const hhmm = (minutes: number) =>
@@ -26,7 +27,7 @@ const hhmm = (minutes: number) =>
  * avec leur matière (même présentation que la vue mois AngularJS, template/calendar/course-month.html).
  * Clic sur un cours → détail. Ex. quinzaine du 12/10 : deux rangées de sept jours.
  */
-export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectName }: Props) {
+export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectName, actions }: Props) {
   const { i18n } = useTranslation(['edt', 'common']);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const now = new Date();
@@ -98,7 +99,7 @@ export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectN
                       {hhmm(from)} {subject}
                     </button>
                     {openKey === k && (
-                      <CourseDetails course={c} subject={subject} from={hhmm(from)} to={hhmm(to)} teacherName={teacherName} rbsName={rbsName} />
+                      <CourseDetails course={c} subject={subject} from={hhmm(from)} to={hhmm(to)} teacherName={teacherName} rbsName={rbsName} actions={actions} />
                     )}
                   </div>
                 );
