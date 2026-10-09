@@ -1,5 +1,7 @@
-// Client REST du module Emploi du temps (edt) — session ENT, même origine.
-// Incrément 1 : lecture seule des cours d'une classe sur une semaine.
+import type { RbsResource } from './rbs';
+
+// Client REST du module Emploi du temps (edt) — session ENT, même origine, mêmes routes que l'IHM
+// AngularJS (consultation, recherche, formulaire de cours, ressources RBS par le relais edt).
 // Le référentiel classes/matières est fourni par le module viescolaire (même établissement).
 
 /**
@@ -18,8 +20,6 @@ export interface Group {
   isInCurrentTeacher: boolean;
 }
 
-/** Ancien nom, conservé pour les appels existants qui n'utilisent que id/name/externalId. */
-export type Klass = Pick<Group, 'id' | 'name' | 'externalId'>;
 
 export interface Matiere {
   id: string;
@@ -231,6 +231,88 @@ export const searchGroups = async (structureId: string, text: string): Promise<A
     await fetch(`/edt/search?structureId=${structureId}&q=${encodeURIComponent(text)}`, base),
   )) ?? [];
 
+// ── Formulaire de cours ─────────────────────────────────────────────────────────
+/** Matière de l'annuaire ; `teacherId` présent = matière enseignée par un enseignant demandé. */
+export interface Subject {
+  subjectId: string;
+  subjectLabel: string;
+  subjectCode?: string;
+  teacherId?: string;
+}
+
+/**
+ * Matières de l'établissement (/directory/timetable/subjects), ou celles des enseignants donnés.
+ * Ex. enseignante HAFSA001 → [{ subjectLabel: "MATHEMATIQUES", teacherId: "c547…" }].
+ */
+export const getSubjects = async (structureId: string, teacherIds: string[] = []): Promise<Subject[]> => {
+  const query = teacherIds.map((id) => `teacherId=${encodeURIComponent(id)}`).join('&');
+  return (await json<Subject[]>(await fetch(`/directory/timetable/subjects/${structureId}${query ? `?${query}` : ''}`, base))) ?? [];
+};
+
+/** Étiquette de cours de l'établissement, ex. { id: 4, label: "Travaux dirigés", abbreviation: "TD" }. */
+export interface CourseTag {
+  id: number;
+  label: string;
+  abbreviation?: string;
+  isHidden?: boolean;
+}
+
+export const getCourseTags = async (structureId: string): Promise<CourseTag[]> =>
+  (await json<CourseTag[]>(await fetch(`/edt/structures/${structureId}/course/tags`, base))) ?? [];
+
+/**
+ * Crée des cours (POST /edt/course, toujours un tableau). La réponse peut signaler des ressources
+ * RBS déjà réservées sur le créneau : `rbsConflicts: [{ conflictResourceIds: [12] }]`.
+ */
+export const createCourses = async (
+  courses: Array<Record<string, unknown>>,
+): Promise<{ rbsConflicts?: Array<{ conflictResourceIds?: number[] }> } | null> =>
+  json(await fetch('/edt/course', { ...base, method: 'POST', headers: mutHeaders(), body: JSON.stringify(courses) }));
+
+// ── Ressources RBS du formulaire de cours ──────────────────────────────────────
+/**
+ * Ressources RBS de l'établissement avec leur type et sa catégorie, par le relais serveur (visible
+ * de tout enseignant, sans droit RBS individuel). Ex. [{ id: 12, name: "Salle 201",
+ * typeName: "Salles du collège", typeCategory: "SALLE_COURS" }].
+ */
+export const getRbsResourceList = async (structureId: string): Promise<RbsResource[]> => {
+  const body = await json<{ types?: Array<{ id: number; name: string; category?: string }>; resources?: Array<{ id: number; name: string; type_id: number }> }>(
+    await fetch(`/edt/structures/${structureId}/rbs/resources`, base),
+  );
+  const types = new Map((body?.types ?? []).map((t) => [t.id, t]));
+  return (body?.resources ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    typeName: types.get(r.type_id)?.name ?? '',
+    typeCategory: (types.get(r.type_id)?.category ?? '').toUpperCase().trim(),
+  }));
+};
+
+/** Catégorie de salle attendue pour une matière, selon school-planner (relais edt) ; null si inconnue. */
+export const getRoomCategory = async (structureId: string, subjectName: string, subjectCode?: string): Promise<string | null> => {
+  const query = `subjectName=${encodeURIComponent(subjectName)}&subjectCode=${encodeURIComponent(subjectCode ?? '')}`;
+  const res = await fetch(`/edt/structures/${structureId}/room-category?${query}`, base);
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { category?: string } | null;
+  return body?.category || null;
+};
+
+/**
+ * La ressource est-elle déjà prise sur le créneau ? Cours EDT occupant la salle (par son nom), puis
+ * réservations RBS de la ressource. Ex. « Salle 201 » le 12/10 de 08:00 à 09:00.
+ * Dates « YYYY-MM-DDTHH:mm:ss » ; ignore les erreurs (avertissement non bloquant).
+ */
+export const isResourceBusy = async (structureId: string, resource: { id: number; name: string }, start: string, end: string): Promise<boolean> => {
+  const edt = await fetch(`/edt/structures/${structureId}/room-conflicts/${start}/${end}?room=${encodeURIComponent(resource.name)}`, base)
+    .then((r) => (r.ok ? r.json() : []))
+    .catch(() => []);
+  if (Array.isArray(edt) && edt.length > 0) return true;
+  const rbs = await fetch(`/rbs/resource/${resource.id}/booking-conflicts/${start}/${end}`, base)
+    .then((r) => (r.ok ? r.json() : []))
+    .catch(() => []);
+  return Array.isArray(rbs) && rbs.length > 0;
+};
+
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
 /** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
 export const getStructurePreference = async (): Promise<{ id?: string; name?: string }> => {
@@ -260,89 +342,6 @@ export const getMatieres = async (structureId: string): Promise<Matiere[]> =>
   ).then((arr) => arr.map((m) => ({ id: m.id, name: m.name })));
 
 // ── Cours (emploi du temps) ─────────────────────────────────────────────────────
-/**
- * Cours d'une classe entre deux dates (« YYYY-MM-DD »). POST de LECTURE (aucun effet de bord).
- * Le filtre reprend la classe (id/externalId/name) ; `union:true` = cours de l'un OU l'autre critère.
- */
-export const getCoursesForClass = async (
-  structureId: string,
-  klass: Klass,
-  startAt: string,
-  endAt: string,
-): Promise<Course[]> => {
-  const filter: CoursesFilter = {
-    teacherIds: [],
-    groupIds: [klass.id],
-    groupExternalIds: klass.externalId ? [klass.externalId] : [],
-    groupNames: [klass.name],
-    union: true,
-    crossDateFilter: false, // true ne renvoie que les cours COUVRANT toute la période (récurrences), pas les occurrences ponctuelles
-  };
-  return json<Course[]>(
-    await fetch(`/edt/structures/${structureId}/common/courses/${startAt}/${endAt}`, {
-      ...base,
-      method: 'POST',
-      headers: mutHeaders(),
-      body: JSON.stringify(filter),
-    }),
-  );
-};
-
-/** Cours d'un enseignant sur la période (POST de lecture, filtre par teacherIds). « Mon emploi du temps ». */
-export const getCoursesForTeacher = async (
-  structureId: string,
-  teacherId: string,
-  startAt: string,
-  endAt: string,
-): Promise<Course[]> => {
-  const filter: CoursesFilter = {
-    teacherIds: [teacherId],
-    groupIds: [],
-    groupExternalIds: [],
-    groupNames: [],
-    union: true,
-    crossDateFilter: false, // true ne renvoie que les cours COUVRANT toute la période (récurrences), pas les occurrences ponctuelles
-  };
-  return json<Course[]>(
-    await fetch(`/edt/structures/${structureId}/common/courses/${startAt}/${endAt}`, {
-      ...base,
-      method: 'POST',
-      headers: mutHeaders(),
-      body: JSON.stringify(filter),
-    }),
-  );
-};
-
-/** Crée un cours ponctuel (POST /edt/course — le backend attend un TABLEAU de cours). */
-export const createCourse = async (data: {
-  structureId: string;
-  subjectId: string;
-  teacherId: string;
-  className: string;
-  room?: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
-}): Promise<void> => {
-  const dow = new Date(`${data.date}T12:00:00`).getDay(); // 0=dim … 6=sam (convention Mongo courses)
-  const course = {
-    structureId: data.structureId,
-    subjectId: data.subjectId,
-    teacherIds: [data.teacherId],
-    classes: [data.className],
-    groups: [],
-    roomLabels: data.room ? [data.room] : [],
-    startDate: `${data.date}T${data.startTime}:00`,
-    endDate: `${data.date}T${data.endTime}:00`,
-    dayOfWeek: dow,
-    manual: true,
-    theoretical: false,
-    everyTwoWeek: false,
-  };
-  const res = await fetch('/edt/course', { ...base, method: 'POST', headers: mutHeaders(), body: JSON.stringify([course]) });
-  if (!res.ok) throw new Error(String(res.status));
-};
-
 // ── Choix d'IHM (bascule AngularJS → React) ──────────────────────────────────
 /**
  * Préférence `edtUi` : choix d'interface + état des bandeaux qui le proposent.
@@ -395,13 +394,16 @@ export const api = {
   getChildren,
   searchTeachers,
   searchGroups,
+  getSubjects,
+  getCourseTags,
+  createCourses,
+  getRbsResourceList,
+  getRoomCategory,
+  isResourceBusy,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,
   getTimeSlots,
-  getCoursesForClass,
-  getCoursesForTeacher,
-  createCourse,
   getUiPreference,
   saveUiPreference,
 };

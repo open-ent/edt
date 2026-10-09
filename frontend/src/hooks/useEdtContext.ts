@@ -60,7 +60,10 @@ export function useEdtContext(): EdtContext {
   };
 
   return {
-    ready: init && !preferenceQuery.isLoading,
+    // Prêt seulement une fois l'établissement résolu : sinon, au remontage d'un écran, un premier
+    // rendu « prêt » sans établissement fait croire à un changement de contexte (et efface la
+    // sélection de l'emploi du temps au retour du formulaire de cours).
+    ready: init && !preferenceQuery.isLoading && (structureId !== '' || structures.length === 0),
     userId: user?.userId ?? '',
     profile: profileOf(user?.type),
     canManage,

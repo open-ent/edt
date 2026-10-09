@@ -12,6 +12,13 @@ interface Props {
   onChange: (selection: Selection) => void;
 }
 
+
+/**
+ * Bouton « × » de retrait, stylé explicitement : la classe btn-link est invisible avec le thème des
+ * modules React (texte de la couleur du fond), la croix n'apparaissait pas.
+ */
+const REMOVE_BUTTON = { color: '#555', fontSize: 16, fontWeight: 700, lineHeight: 1, cursor: 'pointer' };
+
 /**
  * Titre de section dans la police du texte courant : la police de titre du thème (h2) est trop
  * fine à cette taille, ex. « CLASSES / GROUPES » peu lisible avec le thème 1d.
@@ -64,7 +71,8 @@ export function FilterSidebar({ groups, subGroups, teachers, selection, onChange
                 <span style={{ fontSize: 15 }}>{teacherName(id)}</span>
                 <button
                   type="button"
-                  className="btn btn-link p-0"
+                  className="border-0 bg-transparent p-0"
+                  style={REMOVE_BUTTON}
                   aria-label={t('edt.timetable.filter.remove', { 0: teacherName(id) })}
                   onClick={() => onChange(toggleTeacher(selection, id))}
                 >

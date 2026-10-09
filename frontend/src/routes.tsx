@@ -1,5 +1,6 @@
 import { RouteObject, createHashRouter } from 'react-router-dom';
 
+import { CourseForm } from './screens/CourseForm';
 import { Root } from './screens/Root';
 import { Timetable } from './screens/Timetable';
 
@@ -7,7 +8,10 @@ export const routes: RouteObject[] = [
   {
     path: '/',
     element: <Root />,
-    children: [{ index: true, element: <Timetable /> }],
+    children: [
+      { index: true, element: <Timetable /> },
+      { path: 'create', element: <CourseForm /> },
+    ],
   },
 ];
 

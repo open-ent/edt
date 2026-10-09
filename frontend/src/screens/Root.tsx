@@ -8,6 +8,7 @@ import {
 import { Outlet } from 'react-router-dom';
 
 import { UiSwitchBanner } from '../features/UiSwitchBanner';
+import { TimetableStateProvider } from '../hooks/useTimetableState';
 
 /** Gabarit commun : bandeau ENT (Layout + AppHeader + fil d'Ariane) + contenu. */
 export function Root() {
@@ -22,7 +23,9 @@ export function Root() {
         </div>
         <div className="flex-grow-1 overflow-auto">
           <div className="container py-16">
-            <Outlet />
+            <TimetableStateProvider>
+              <Outlet />
+            </TimetableStateProvider>
           </div>
         </div>
       </Layout>

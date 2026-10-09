@@ -302,5 +302,22 @@
   "edt.timetable.period.range": "du [[0]] au [[1]]",
   "edt.timetable.quarters": "Quarts d'heure",
   "edt.timetable.courses.empty": "Aucun cours sur cette période.",
-  "edt.timetable.all.structures.hint": "« Tous mes établissements » affiche votre propre emploi du temps dans chacun de vos établissements."
+  "edt.timetable.all.structures.hint": "« Tous mes établissements » affiche votre propre emploi du temps dans chacun de vos établissements.",
+  "edt.form.teachers": "Enseignants",
+  "edt.form.groups": "Classes et groupes",
+  "edt.form.filter": "Rechercher dans « [[0]] »",
+  "edt.form.no.match": "Aucun résultat",
+  "edt.form.exceptional": "Matière personnalisée",
+  "edt.form.no.tag": "Aucune étiquette",
+  "edt.form.forbidden": "Vous n'avez pas le droit de créer des cours.",
+  "edt.form.error.teachers": "Choisissez au moins un enseignant.",
+  "edt.form.error.groups": "Choisissez au moins une classe ou un groupe.",
+  "edt.form.error.subject": "Choisissez une matière, ou saisissez l'intitulé de la matière personnalisée.",
+  "edt.form.error.date": "Indiquez la date du cours.",
+  "edt.form.error.time": "Indiquez l'heure de début et de fin.",
+  "edt.form.error.order": "La fin doit suivre le début (au moins 15 minutes en horaire libre).",
+  "edt.form.error.past": "Ce cours commencerait dans le passé.",
+  "edt.form.error.server": "Le cours n'a pas pu être créé. Réessayez, ou contactez l'administrateur de l'établissement si le problème persiste.",
+  "edt.form.resources": "Salle ou matériel à réserver",
+  "edt.form.category.mismatch": "[[0]] ne correspond pas au type de salle attendu pour [[2]] ([[1]]). Vous pouvez tout de même enregistrer."
 }

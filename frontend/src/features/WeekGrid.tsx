@@ -24,6 +24,8 @@ interface Props {
   /** Cours ciblé par un lien profond (mis en évidence et amené à l'écran). */
   highlighted?: Course;
   highlightRef?: (el: HTMLElement | null) => void;
+  /** Clic sur un créneau vide (droit de gestion) : création d'un cours à ce jour et cette heure. */
+  onCreateAt?: (date: string, minutes: number) => void;
 }
 
 const hhmm = (minutes: number) =>
@@ -35,7 +37,7 @@ const hhmm = (minutes: number) =>
  * masqué). Survol ou clic sur un cours → détail (horaire, enseignants, classes, salles, ressources
  * RBS, étiquettes). Ex. deux cours de 08:00 à 09:00 le lundi → deux colonnes côte à côte.
  */
-export function WeekGrid({ days, showQuarterHours = true, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef }: Props) {
+export function WeekGrid({ days, showQuarterHours = true, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt }: Props) {
   const { t, i18n } = useTranslation(['edt', 'common']);
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -86,13 +88,25 @@ export function WeekGrid({ days, showQuarterHours = true, courses, slots, teache
           <div
             key={ymd(d)}
             data-day={ymd(d)}
-            style={{ position: 'relative', height, borderLeft: '1px solid #e0e0e0', background: d.getDay() === 0 ? '#fafafa' : undefined }}
+            style={{
+              position: 'relative',
+              height,
+              borderLeft: '1px solid #e0e0e0',
+              background: d.getDay() === 0 ? '#fafafa' : undefined,
+              cursor: onCreateAt ? 'copy' : undefined,
+            }}
+            onClick={(e) => {
+              // Seul un clic sur le fond de la journée crée un cours (pas sur un cours existant).
+              if (!onCreateAt || e.target !== e.currentTarget) return;
+              const offset = e.clientY - e.currentTarget.getBoundingClientRect().top;
+              onCreateAt(ymd(d), Math.round(start + offset / PX_PER_MIN));
+            }}
           >
             {slots.map((s) => (
               <div
                 key={s.id}
                 aria-hidden
-                style={{ position: 'absolute', left: 0, right: 0, top: (minutesOfHour(s.startHour) - start) * PX_PER_MIN, borderTop: '1px dashed #d9d9d9' }}
+                style={{ position: 'absolute', left: 0, right: 0, top: (minutesOfHour(s.startHour) - start) * PX_PER_MIN, borderTop: '1px dashed #d9d9d9', pointerEvents: 'none' }}
               />
             ))}
             {showQuarterHours &&
@@ -101,7 +115,7 @@ export function WeekGrid({ days, showQuarterHours = true, courses, slots, teache
                   key={m}
                   aria-hidden
                   data-quarter
-                  style={{ position: 'absolute', left: 0, right: 0, top: (m - start) * PX_PER_MIN, borderTop: '1px dotted #f0f0f0' }}
+                  style={{ position: 'absolute', left: 0, right: 0, top: (m - start) * PX_PER_MIN, borderTop: '1px dotted #f0f0f0', pointerEvents: 'none' }}
                 />
               ))}
             {(placedByDay.get(ymd(d)) ?? []).map(({ course: c, start: from, end: to, lane, lanes }) => {

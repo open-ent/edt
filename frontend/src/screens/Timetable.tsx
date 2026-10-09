@@ -1,9 +1,9 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { api, childClasses, Course, Group } from '../api';
+import { api, childClasses } from '../api';
 import { ALL_STRUCTURES, composesOwnFilter, sortGroups } from '../context';
 import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
@@ -12,7 +12,8 @@ import { WeekGrid } from '../features/WeekGrid';
 import { courseSubject } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection, toggleGroup } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
-import { initialAnchor, periodOf, step, ViewMode, VIEW_MODES } from '../period';
+import { useTimetableState } from '../hooks/useTimetableState';
+import { initialAnchor, periodOf, step, VIEW_MODES } from '../period';
 import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
 
 
@@ -20,7 +21,9 @@ import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
 export function Timetable() {
   const { t } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
-  const qc = useQueryClient();
+  const navigate = useNavigate();
+  // Retour du formulaire : ressource RBS non réservée (créneau déjà pris), cf. CourseForm.
+  const rbsConflict = (useLocation().state as { rbsConflict?: string } | null)?.rbsConflict;
   const isTeacher = ctx.profile === 'teacher';
   const isStudent = ctx.profile === 'student';
   const isRelative = ctx.profile === 'relative';
@@ -47,18 +50,26 @@ export function Timetable() {
   const targetDate = searchParams.get('date');
   const targetStart = searchParams.get('start');
 
-  const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
-  // Date de référence de la période affichée ; un lien profond y place directement la bonne date.
-  const [anchor, setAnchor] = useState(() => {
-    if (targetDate) {
-      const d = new Date(`${targetDate}T00:00:00`);
-      if (!Number.isNaN(d.getTime())) return d;
-    }
-    return initialAnchor(new Date());
-  });
-  const [mode, setMode] = useState<ViewMode>('week');
-  const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [showQuarterHours, setShowQuarterHours] = useState(true);
+  const {
+    selection,
+    setSelection,
+    selectionKey,
+    setSelectionKey,
+    anchor,
+    setAnchor,
+    mode,
+    setMode,
+    view,
+    setView,
+    showQuarterHours,
+    setShowQuarterHours,
+  } = useTimetableState();
+  // Un lien profond (#/?date=…) place directement la période sur la bonne date.
+  useEffect(() => {
+    if (!targetDate) return;
+    const d = new Date(`${targetDate}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) setAnchor(d);
+  }, [targetDate, setAnchor]);
   const period = useMemo(() => periodOf(mode, anchor), [mode, anchor]);
 
   const groupsQuery = useQuery({
@@ -82,36 +93,16 @@ export function Timetable() {
 
   // Comme l'Angular : un enseignant voit d'emblée son propre emploi du temps, le personnel part
   // d'une sélection vide. Repris à chaque changement d'établissement (la sélection n'y a plus cours).
+  // La sélection n'est réinitialisée que si le contexte a changé : un aller-retour dans le
+  // formulaire de cours la conserve.
   useEffect(() => {
+    if (!ctx.ready) return;
+    const key = `${structureId}|${ctx.profile}|${teacherId}`;
+    if (key === selectionKey) return;
+    setSelectionKey(key);
     setSelection(isTeacher && teacherId ? { ...EMPTY_SELECTION, teacherIds: [teacherId] } : EMPTY_SELECTION);
-  }, [structureId, isTeacher, teacherId]);
+  }, [ctx.ready, ctx.profile, structureId, isTeacher, teacherId, selectionKey, setSelectionKey, setSelection]);
 
-  // Création d'un cours ponctuel (parité Angular « Créer un cours », POST /edt/course).
-  const [creating, setCreating] = useState(false);
-  const [newSubjectId, setNewSubjectId] = useState('');
-  const [newClassName, setNewClassName] = useState('');
-  const [newRoom, setNewRoom] = useState('');
-  const [newDate, setNewDate] = useState('');
-  const [newStart, setNewStart] = useState('09:00');
-  const [newEnd, setNewEnd] = useState('10:00');
-  const createMut = useMutation({
-    mutationFn: () =>
-      api.createCourse({
-        structureId,
-        subjectId: newSubjectId,
-        teacherId,
-        className: newClassName,
-        room: newRoom.trim() || undefined,
-        date: newDate,
-        startTime: newStart,
-        endTime: newEnd,
-      }),
-    onSuccess: () => {
-      setCreating(false);
-      qc.invalidateQueries({ queryKey: ['edt', 'courses'] });
-    },
-  });
-  const newCourseValid = !!(newSubjectId && newClassName && newDate && newStart && newEnd && teacherId);
   const classes = useMemo(
     () => (isRelative ? (child ? childClasses(child) : []) : sortGroups(groupsQuery.data ?? [])),
     [isRelative, child, groupsQuery.data],
@@ -136,7 +127,6 @@ export function Timetable() {
   });
   const subGroups = useMemo(() => subGroupsQuery.data ?? new Map(), [subGroupsQuery.data]);
   const shownGroupIds = useMemo(() => effectiveGroupIds(activeSelection, subGroups), [activeSelection, subGroups]);
-  const groupLabel = (g: Group) => (g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
   const slots = slotsQuery.data ?? [];
   const teacherName = (id: string) => teachersQuery.data?.find((x) => x.id === id)?.displayName;
@@ -213,64 +203,15 @@ export function Timetable() {
     <div>
       <div className="d-flex align-items-center justify-content-between mb-16 flex-wrap gap-8">
         <h1 className="m-0">{t('edt.timetable.title')}</h1>
-        {!creating && ctx.canManage && (
-          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+        {ctx.canManage && !ctx.allStructures && (
+          <button type="button" className="btn btn-primary" onClick={() => navigate('/create')}>
             {t('edt.course.new', { defaultValue: 'Créer un cours' })}
           </button>
         )}
       </div>
 
-      {creating && (
-        <form
-          className="card p-16 mb-16"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (newCourseValid) createMut.mutate();
-          }}
-        >
-          <h2 style={{ fontSize: 18 }} className="mb-12">{t('edt.course.new', { defaultValue: 'Créer un cours' })}</h2>
-          <div className="d-flex gap-12 flex-wrap mb-12">
-            <div>
-              <label htmlFor="nc-subject" className="form-label">{t('edt.subject', { defaultValue: 'Matière' })}</label>
-              <select id="nc-subject" className="form-select" value={newSubjectId} onChange={(e) => setNewSubjectId(e.target.value)} required>
-                <option value="">—</option>
-                {(matieresQuery.data ?? []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="nc-class" className="form-label">{t('edt.class', { defaultValue: 'Classe' })}</label>
-              <select id="nc-class" className="form-select" value={newClassName} onChange={(e) => setNewClassName(e.target.value)} required>
-                <option value="">—</option>
-                {classes.map((c) => <option key={c.id} value={c.name}>{groupLabel(c)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="nc-date" className="form-label">{t('edt.date', { defaultValue: 'Date' })}</label>
-              <input id="nc-date" type="date" className="form-control" value={newDate} onChange={(e) => setNewDate(e.target.value)} required />
-            </div>
-            <div>
-              <label htmlFor="nc-start" className="form-label">{t('edt.start', { defaultValue: 'Début' })}</label>
-              <input id="nc-start" type="time" className="form-control" value={newStart} onChange={(e) => setNewStart(e.target.value)} required />
-            </div>
-            <div>
-              <label htmlFor="nc-end" className="form-label">{t('edt.end', { defaultValue: 'Fin' })}</label>
-              <input id="nc-end" type="time" className="form-control" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} required />
-            </div>
-            <div>
-              <label htmlFor="nc-room" className="form-label">{t('edt.room', { defaultValue: 'Salle' })}</label>
-              <input id="nc-room" type="text" className="form-control" value={newRoom} onChange={(e) => setNewRoom(e.target.value)} />
-            </div>
-          </div>
-          {createMut.isError && (
-            <div className="alert alert-warning" role="alert">{t('edt.course.error', { defaultValue: 'La création du cours a échoué (droit requis).' })}</div>
-          )}
-          <div className="d-flex gap-8">
-            <button type="submit" className="btn btn-primary" disabled={!newCourseValid || createMut.isPending}>
-              {t('edt.course.create', { defaultValue: 'Créer' })}
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setCreating(false)}>{t('edt.cancel', { defaultValue: 'Annuler' })}</button>
-          </div>
-        </form>
+      {rbsConflict && (
+        <div className="alert alert-warning" role="alert">{`${t('edt.notify.rbs.conflict')}${rbsConflict}`}</div>
       )}
 
       <div className="d-flex gap-16 align-items-start">
@@ -433,6 +374,7 @@ export function Timetable() {
             subjectName={(id) => subjectName.get(id)}
             highlighted={highlightCourse}
             highlightRef={(el) => { highlightRef.current = el; }}
+            onCreateAt={ctx.canManage && !ctx.allStructures ? (date, minutes) => navigate(`/create?date=${date}&minutes=${minutes}`) : undefined}
           />
           {!coursesLoading && courses.length === 0 && (
             <p className="text-muted mt-8">{t('edt.courses.empty.grid')}</p>

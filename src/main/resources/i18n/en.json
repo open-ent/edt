@@ -302,5 +302,22 @@
   "edt.timetable.period.range": "from [[0]] to [[1]]",
   "edt.timetable.quarters": "Quarter hours",
   "edt.timetable.courses.empty": "No course in this period.",
-  "edt.timetable.all.structures.hint": "“All my schools” shows your own timetable in each of your schools."
+  "edt.timetable.all.structures.hint": "“All my schools” shows your own timetable in each of your schools.",
+  "edt.form.teachers": "Teachers",
+  "edt.form.groups": "Classes and groups",
+  "edt.form.filter": "Search in “[[0]]”",
+  "edt.form.no.match": "No result",
+  "edt.form.exceptional": "Custom subject",
+  "edt.form.no.tag": "No label",
+  "edt.form.forbidden": "You are not allowed to create courses.",
+  "edt.form.error.teachers": "Choose at least one teacher.",
+  "edt.form.error.groups": "Choose at least one class or group.",
+  "edt.form.error.subject": "Choose a subject, or type the custom subject name.",
+  "edt.form.error.date": "Enter the course date.",
+  "edt.form.error.time": "Enter the start and end time.",
+  "edt.form.error.order": "The end must follow the start (at least 15 minutes with free times).",
+  "edt.form.error.past": "This course would start in the past.",
+  "edt.form.error.server": "The course could not be created. Try again, or contact your school administrator if the problem persists.",
+  "edt.form.resources": "Room or equipment to book",
+  "edt.form.category.mismatch": "[[0]] does not match the room type expected for [[2]] ([[1]]). You can still save."
 }
