@@ -5,6 +5,8 @@ import { useSearchParams } from 'react-router-dom';
 
 import { api, Course, Group } from '../api';
 import { composesOwnFilter, sortGroups } from '../context';
+import { FilterSidebar } from '../features/FilterSidebar';
+import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { addDays, courseSortKey, dayLabel, hhmm, mondayOf, weekLabel, ymd } from '../utils';
 
@@ -16,7 +18,7 @@ const JOURS: Array<{ dow: number; label: string }> = [
   { dow: 5, label: 'Vendredi' },
 ];
 
-/** Emploi du temps d'une classe sur une semaine (liste ou grille horaire). */
+/** Emploi du temps des classes, groupes et enseignants choisis, sur une semaine (grille ou liste). */
 export function Timetable() {
   const { t } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
@@ -30,7 +32,7 @@ export function Timetable() {
   const targetDate = searchParams.get('date');
   const targetStart = searchParams.get('start');
 
-  const [classId, setClassId] = useState('');
+  const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [monday, setMonday] = useState(() => {
     if (targetDate) {
       const d = new Date(`${targetDate}T00:00:00`);
@@ -49,12 +51,16 @@ export function Timetable() {
   const slotsQuery = useQuery({ queryKey: ['edt', 'timeslots', structureId], queryFn: () => api.getTimeSlots(structureId), enabled: !!structureId });
 
   const teacherId = ctx.userId;
-  const isMine = classId === '__me__';
+  const teachersQuery = useQuery({
+    queryKey: ['edt', 'teachers', structureId],
+    queryFn: () => api.getTeachers(structureId),
+    enabled: !!structureId && composesOwnFilter(ctx.profile),
+  });
 
   // Comme l'Angular : un enseignant voit d'emblée son propre emploi du temps, le personnel part
   // d'une sélection vide. Repris à chaque changement d'établissement (la sélection n'y a plus cours).
   useEffect(() => {
-    setClassId(isTeacher && teacherId ? '__me__' : '');
+    setSelection(isTeacher && teacherId ? { ...EMPTY_SELECTION, teacherIds: [teacherId] } : EMPTY_SELECTION);
   }, [structureId, isTeacher, teacherId]);
 
   // Création d'un cours ponctuel (parité Angular « Créer un cours », POST /edt/course).
@@ -84,7 +90,19 @@ export function Timetable() {
   });
   const newCourseValid = !!(newSubjectId && newClassName && newDate && newStart && newEnd && teacherId);
   const classes = useMemo(() => sortGroups(groupsQuery.data ?? []), [groupsQuery.data]);
-  const selectedClass: Group | undefined = classes.find((c) => c.id === classId);
+  // Groupes des classes choisies (demi-groupes, options), ajoutés automatiquement au filtre.
+  const chosenClassIds = useMemo(
+    () => selection.chosen.filter((id) => classes.find((c) => c.id === id)?.type_groupe === 0).sort(),
+    [selection.chosen, classes],
+  );
+  const subGroupsQuery = useQuery({
+    queryKey: ['edt', 'subgroups', chosenClassIds],
+    queryFn: () => api.getSubGroups(chosenClassIds),
+    enabled: chosenClassIds.length > 0,
+    placeholderData: (previous) => previous,
+  });
+  const subGroups = useMemo(() => subGroupsQuery.data ?? new Map(), [subGroupsQuery.data]);
+  const shownGroupIds = useMemo(() => effectiveGroupIds(selection, subGroups), [selection, subGroups]);
   const groupLabel = (g: Group) => (g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
   const slots = slotsQuery.data ?? [];
@@ -92,13 +110,14 @@ export function Timetable() {
 
   const startAt = ymd(monday);
   const endAt = ymd(addDays(monday, 6));
-  const hasSelection = isMine ? !!teacherId : !!selectedClass;
+  const hasSelection = shownGroupIds.length > 0 || selection.teacherIds.length > 0;
+  const filter = useMemo(
+    () => coursesFilter(shownGroupIds, selection.teacherIds, classes, subGroups),
+    [shownGroupIds, selection.teacherIds, classes, subGroups],
+  );
   const coursesQuery = useQuery({
-    queryKey: ['edt', 'courses', structureId, classId, startAt, endAt],
-    queryFn: () =>
-      isMine
-        ? api.getCoursesForTeacher(structureId, teacherId, startAt, endAt)
-        : api.getCoursesForClass(structureId, selectedClass!, startAt, endAt),
+    queryKey: ['edt', 'courses', structureId, filter, startAt, endAt],
+    queryFn: () => api.getCourses(structureId, filter, startAt, endAt),
     enabled: !!structureId && hasSelection,
   });
 
@@ -223,7 +242,16 @@ export function Timetable() {
         </form>
       )}
 
-      {/* Barre de contrôle : classe + navigation semaine */}
+      <div className="d-flex gap-16 align-items-start">
+        <FilterSidebar
+          groups={classes}
+          subGroups={subGroups}
+          teachers={teachersQuery.data ?? []}
+          selection={selection}
+          onChange={setSelection}
+        />
+        <div className="flex-grow-1" style={{ minWidth: 0 }}>
+      {/* Barre de contrôle : établissement, navigation semaine, affichage */}
       <div className="d-flex gap-16 flex-wrap align-items-end mb-16">
         {ctx.structures.length > 1 && (
           <div>
@@ -238,23 +266,15 @@ export function Timetable() {
             </select>
           </div>
         )}
-        <div>
-          <label htmlFor="edt-class" className="form-label">{t('edt.class', { defaultValue: 'Classe' })}</label>
-          <select id="edt-class" className="form-select" value={classId} onChange={(e) => setClassId(e.target.value)}>
-            <option value="">{t('edt.class.choose', { defaultValue: 'Choisir…' })}</option>
-            {isTeacher && teacherId && <option value="__me__">{t('edt.timetable.mine')}</option>}
-            {[
-              { label: t('edt.timetable.groups.classes'), items: classes.filter((c) => c.type_groupe === 0) },
-              { label: t('edt.timetable.groups.groups'), items: classes.filter((c) => c.type_groupe !== 0) },
-            ]
-              .filter((section) => section.items.length > 0)
-              .map((section) => (
-                <optgroup key={section.label} label={section.label}>
-                  {section.items.map((c) => <option key={c.id} value={c.id}>{groupLabel(c)}</option>)}
-                </optgroup>
-              ))}
-          </select>
-        </div>
+        {isTeacher && teacherId && !selection.teacherIds.includes(teacherId) && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setSelection((sel) => ({ ...sel, teacherIds: [...sel.teacherIds, teacherId] }))}
+          >
+            {t('edt.timetable.mine')}
+          </button>
+        )}
         <div className="d-flex gap-8 align-items-center">
           <button type="button" className="btn btn-secondary" onClick={() => setMonday((m) => addDays(m, -7))}>
             {t('edt.week.prev', { defaultValue: '← Semaine précédente' })}
@@ -275,7 +295,7 @@ export function Timetable() {
       </div>
 
       {!hasSelection && (
-        <p className="text-muted">{t('edt.select.class', { defaultValue: 'Sélectionnez une classe pour afficher son emploi du temps.' })}</p>
+        <p className="text-muted">{t('edt.timetable.select.prompt')}</p>
       )}
 
       {hasSelection && coursesQuery.isLoading && <p>{t('edt.loading', { defaultValue: 'Chargement…' })}</p>}
@@ -363,6 +383,8 @@ export function Timetable() {
           </tbody>
         </table>
       )}
+        </div>
+      </div>
     </div>
   );
 }

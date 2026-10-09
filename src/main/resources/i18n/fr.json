@@ -285,5 +285,10 @@
   "edt.view.list": "Liste",
   "edt.week.prev": "← Semaine précédente",
   "edt.week.next": "Semaine suivante →",
-  "edt.date": "Date"
+  "edt.date": "Date",
+  "edt.timetable.filter.title": "Classes / Groupes",
+  "edt.timetable.filter.teachers": "Enseignants",
+  "edt.timetable.filter.subgroups": "Groupes des classes choisies",
+  "edt.timetable.filter.remove": "Retirer [[0]]",
+  "edt.timetable.select.prompt": "Sélectionnez des classes, des groupes ou des enseignants pour afficher leur emploi du temps."
 }

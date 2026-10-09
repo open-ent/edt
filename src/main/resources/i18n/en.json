@@ -285,5 +285,10 @@
   "edt.view.list": "List",
   "edt.week.prev": "← Previous week",
   "edt.week.next": "Next week →",
-  "edt.date": "Date"
+  "edt.date": "Date",
+  "edt.timetable.filter.title": "Classes / Groups",
+  "edt.timetable.filter.teachers": "Teachers",
+  "edt.timetable.filter.subgroups": "Groups of the selected classes",
+  "edt.timetable.filter.remove": "Remove [[0]]",
+  "edt.timetable.select.prompt": "Select classes, groups or teachers to display their timetable."
 }

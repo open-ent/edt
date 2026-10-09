@@ -111,6 +111,59 @@ export const getGroups = async (structureId: string, isTeacher: boolean): Promis
   return [...mine.map((g) => toGroup(g, true)), ...all.filter((g) => !mineIds.has(g.id)).map((g) => toGroup(g, false))];
 };
 
+// ── Groupes d'une classe, enseignants ───────────────────────────────────────────
+/**
+ * Groupes rattachés à des classes (demi-groupes, options), comme l'IHM AngularJS
+ * (`calendarItems.getGroups`). Ex. classes [401] → Map { "401" → [{ id, name: "401 grp A" }] }.
+ * `studentId` restreint aux groupes d'un élève (vue élève ou parent).
+ */
+export const getSubGroups = async (
+  classIds: string[],
+  studentId?: string,
+): Promise<Map<string, Array<{ id: string; name: string }>>> => {
+  const result = new Map<string, Array<{ id: string; name: string }>>();
+  if (classIds.length === 0) return result;
+  const query = classIds.map((id) => `classes=${encodeURIComponent(id)}`).join('&');
+  const url = `/viescolaire/group/from/class?${query}${studentId ? `&student=${encodeURIComponent(studentId)}` : ''}`;
+  const rows = (await json<Array<{ id_classe: string; id_groups: string[]; name_groups: string[] }>>(await fetch(url, base))) ?? [];
+  for (const row of rows) {
+    result.set(
+      row.id_classe,
+      (row.id_groups ?? []).map((id, i) => ({ id, name: row.name_groups?.[i] ?? id })),
+    );
+  }
+  return result;
+};
+
+export interface Teacher {
+  id: string;
+  displayName: string;
+}
+
+/** Enseignants de l'établissement (noms affichés dans le filtre et l'infobulle des cours). */
+export const getTeachers = async (structureId: string): Promise<Teacher[]> =>
+  json<Array<{ id: string; displayName?: string; lastName?: string; firstName?: string }>>(
+    await fetch(`/viescolaire/user/list?profile=Teacher&structureId=${structureId}`, base),
+  ).then((arr) =>
+    (arr ?? []).map((t) => ({ id: t.id, displayName: t.displayName ?? `${t.lastName ?? ''} ${t.firstName ?? ''}`.trim() })),
+  );
+
+/** Cours correspondant à un filtre (classes, groupes, enseignants) entre deux dates « YYYY-MM-DD ». */
+export const getCourses = async (
+  structureId: string,
+  filter: CoursesFilter,
+  startAt: string,
+  endAt: string,
+): Promise<Course[]> =>
+  json<Course[]>(
+    await fetch(`/edt/structures/${structureId}/common/courses/${startAt}/${endAt}`, {
+      ...base,
+      method: 'POST',
+      headers: mutHeaders(),
+      body: JSON.stringify(filter),
+    }),
+  );
+
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
 /** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
 export const getStructurePreference = async (): Promise<{ id?: string; name?: string }> => {
@@ -268,6 +321,9 @@ export const saveUiPreference = async (preference: UiPreference): Promise<void> 
 
 export const api = {
   getGroups,
+  getSubGroups,
+  getTeachers,
+  getCourses,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,

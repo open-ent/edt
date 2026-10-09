@@ -1,0 +1,40 @@
+// Couleurs nommées attribuées aux classes par vie-scolaire (`color` de /viescolaire/classes?isEdt=true),
+// reprises de l'IHM AngularJS (public/sass/global/components/_mixins.scss) pour garder la même teinte
+// par classe dans les deux interfaces. Ex. 'keppel-blue-lighter' → rgba(88, 177, 159, 0.7).
+const PALETTE: Record<string, string> = {
+  'light-orange': 'rgba(254, 164, 127, 1)',
+  'solid-orange': 'rgba(249, 127, 81, 1)',
+  'spiro-blue': 'rgba(37, 204, 247, 1)',
+  'honey-orange': 'rgba(234, 181, 67, 1)',
+  'garden-blue': 'rgba(85, 230, 193, 1)',
+  'sky-blue': 'rgba(27, 156, 252, 1)',
+  'keppel-blue': 'rgba(88, 177, 159, 1)',
+  'marine-black': 'rgba(44, 58, 71, 1)',
+  'fuchsia': 'rgba(179, 55, 113, 1)',
+  'indigo': 'rgba(59, 59, 152, 1)',
+  'peach-orange': 'rgba(253, 114, 114, 1)',
+  'light-purple': 'rgba(214, 162, 232, 1)',
+  'magenta': 'rgba(109, 33, 79, 1)',
+  'darker-blue': 'rgba(24, 44, 97, 1)',
+  'pink': 'rgba(252, 66, 123, 1)',
+  'solid-purple': 'rgba(130, 88, 159, 1)',
+  'light-orange-lighter': 'rgba(254, 164, 127, 0.7)',
+  'solid-orange-lighter': 'rgba(249, 127, 81, 0.7)',
+  'spiro-blue-lighter': 'rgba(37, 204, 247, 0.7)',
+  'garden-blue-lighter': 'rgba(85, 230, 193, 0.7)',
+  'light-grey-lighter': 'rgba(202, 211, 200, 0.7)',
+  'sky-blue-lighter': 'rgba(27, 156, 252, 0.7)',
+  'keppel-blue-lighter': 'rgba(88, 177, 159, 0.7)',
+  'marine-black-lighter': 'rgba(44, 58, 71, 0.7)',
+  'fuchsia-lighter': 'rgba(179, 55, 113, 0.7)',
+  'indigo-lighter': 'rgba(59, 59, 152, 0.7)',
+  'peach-orange-lighter': 'rgba(253, 114, 114, 0.7)',
+  'light-purple-lighter': 'rgba(214, 162, 232, 0.7)',
+  'magenta-lighter': 'rgba(109, 33, 79, 0.7)',
+  'darker-blue-lighter': 'rgba(24, 44, 97, 0.7)',
+  'pink-lighter': 'rgba(252, 66, 123, 0.7)',
+  'solid-purple-lighter': 'rgba(130, 88, 159, 0.7)',
+};
+
+/** Teinte d'une classe ; gris neutre si la couleur est absente ou inconnue (ex. groupe manuel sans couleur). */
+export const groupColor = (name: string | undefined): string => (name && PALETTE[name]) || 'rgba(160, 167, 179, 1)';
