@@ -319,5 +319,12 @@
   "edt.form.error.past": "Ce cours commencerait dans le passé.",
   "edt.form.error.server": "Le cours n'a pas pu être créé. Réessayez, ou contactez l'administrateur de l'établissement si le problème persiste.",
   "edt.form.resources": "Salle ou matériel à réserver",
-  "edt.form.category.mismatch": "[[0]] ne correspond pas au type de salle attendu pour [[2]] ([[1]]). Vous pouvez tout de même enregistrer."
+  "edt.form.category.mismatch": "[[0]] ne correspond pas au type de salle attendu pour [[2]] ([[1]]). Vous pouvez tout de même enregistrer.",
+  "edt.form.resource.none": "Aucun document attaché.",
+  "edt.form.resource.duplicates": "Certains documents étaient déjà attachés : seuls les nouveaux ont été ajoutés.",
+  "edt.form.resource.mediacentre": "Médiacentre",
+  "edt.form.resource.add": "Ajouter",
+  "edt.form.resource.added": "Déjà ajoutée",
+  "edt.form.mediacentre.error": "La recherche dans le médiacentre n'a pas abouti. Réessayez plus tard.",
+  "edt.form.close": "Fermer"
 }

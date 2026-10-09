@@ -4,6 +4,7 @@
 
 import type { Group, TimeSlot } from './api';
 import { minutesOfHour } from './grid';
+import type { CourseResource } from './resources';
 
 export interface CourseDraft {
   structureId: string;
@@ -25,6 +26,8 @@ export interface CourseDraft {
   tagId?: number;
   rbsResourceIds: number[];
   roomLabels: string[];
+  /** Documents attachés (espace documentaire, médiacentre). */
+  resources: CourseResource[];
 }
 
 export const emptyDraft = (structureId: string): CourseDraft => ({
@@ -42,6 +45,7 @@ export const emptyDraft = (structureId: string): CourseDraft => ({
   endTime: '',
   rbsResourceIds: [],
   roomLabels: [],
+  resources: [],
 });
 
 /**
@@ -108,7 +112,7 @@ export function toCoursePayload(draft: CourseDraft, slots: TimeSlot[], login: st
     everyTwoWeek: false,
     updated: now.toISOString(),
     lastUser: login,
-    resources: [],
+    resources: draft.resources,
     rbsResourceIds: draft.rbsResourceIds,
     startDate: `${draft.date}T${times.start}:00`,
     endDate: `${draft.date}T${times.end}:00`,

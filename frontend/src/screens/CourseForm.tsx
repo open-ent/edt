@@ -1,4 +1,4 @@
-import { useEdificeClient } from '@open-ent/react';
+import { MediaLibrary, useEdificeClient, useMediaLibrary } from '@open-ent/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +7,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, Group } from '../api';
 import { sortGroups } from '../context';
 import { CourseDraft, DraftError, effectiveTimes, emptyDraft, prefillTimes, toCoursePayload, validateDraft } from '../courseForm';
+import { MediacentrePicker } from '../features/MediacentrePicker';
 import { MultiPicker } from '../features/MultiPicker';
+import { addResources, PickedFile, workspaceResource } from '../resources';
 import { categoryLabel, localRequiredCategory, mismatchedResources, resourceLabel, sortForCategory } from '../rbs';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { useTimetableState } from '../hooks/useTimetableState';
@@ -23,7 +25,11 @@ import { ymd } from '../utils';
 export function CourseForm() {
   const { t } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
-  const { user } = useEdificeClient();
+  const { user, appCode } = useEdificeClient();
+  // Documents attachés : médiathèque du socle (espace documentaire) et recherche médiacentre.
+  const { ref: mediaLibraryRef, ...mediaLibraryHandlers } = useMediaLibrary();
+  const [mediacentreOpen, setMediacentreOpen] = useState(false);
+  const [resourceNotice, setResourceNotice] = useState('');
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [params] = useSearchParams();
@@ -106,6 +112,15 @@ export function CourseForm() {
     },
     enabled: selectedRbs.length > 0 && !!draft.date && !!times,
   });
+
+  const onPickFiles = (result: unknown) => {
+    const picked = (Array.isArray(result) ? result : [result]) as PickedFile[];
+    const incoming = picked.map(workspaceResource).filter((r): r is NonNullable<typeof r> => r !== null);
+    const merged = addResources(draft.resources, incoming);
+    setDraft((d) => ({ ...d, resources: merged.resources }));
+    setResourceNotice(merged.duplicates > 0 ? t('edt.form.resource.duplicates') : '');
+    mediaLibraryRef.current?.hide();
+  };
 
   const errors = validateDraft(draft, slots, new Date());
   const create = useMutation({
@@ -305,6 +320,53 @@ export function CourseForm() {
           </select>
         </div>
       </div>
+
+      <section className="card p-16 mb-16" aria-labelledby="edt-resources-title">
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-8 mb-8">
+          <div id="edt-resources-title" role="heading" aria-level={2} style={{ fontSize: 15, fontWeight: 700 }}>{t('edt.resources.label')}</div>
+          <div className="d-flex gap-8 flex-wrap">
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => mediaLibraryRef.current?.show('attachment')}>
+              {t('edt.resources.add.workspace')}
+            </button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setMediacentreOpen(true)}>
+              {t('edt.resources.add.mediacentre')}
+            </button>
+          </div>
+        </div>
+        {draft.resources.length === 0 ? (
+          <p className="text-muted m-0" style={{ fontSize: 14 }}>{t('edt.form.resource.none')}</p>
+        ) : (
+          <ul className="list-unstyled m-0 d-flex flex-column gap-4">
+            {draft.resources.map((r) => (
+              <li key={`${r.type}|${r.id}`} className="d-flex align-items-center justify-content-between gap-8">
+                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-truncate">
+                  {r.type === 'mediacentre' ? `${t('edt.form.resource.mediacentre')} : ` : ''}
+                  {r.name}
+                </a>
+                <button
+                  type="button"
+                  className="border-0 bg-transparent p-0"
+                  style={{ color: '#555', fontSize: 16, fontWeight: 700, lineHeight: 1 }}
+                  aria-label={t('edt.timetable.filter.remove', { 0: r.name })}
+                  onClick={() => setDraft((d) => ({ ...d, resources: d.resources.filter((x) => !(x.type === r.type && x.id === r.id)) }))}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {resourceNotice && <p className="text-muted mt-8 mb-0" role="status">{resourceNotice}</p>}
+      </section>
+
+      {mediacentreOpen && (
+        <MediacentrePicker
+          attached={draft.resources}
+          onAdd={(resource) => setDraft((d) => ({ ...d, resources: addResources(d.resources, [resource]).resources }))}
+          onClose={() => setMediacentreOpen(false)}
+        />
+      )}
+      <MediaLibrary appCode={appCode} ref={mediaLibraryRef} multiple visibility="protected" {...mediaLibraryHandlers} onSuccess={onPickFiles} />
 
       {submitted && errors.length > 0 && (
         <div className="alert alert-warning" role="alert">

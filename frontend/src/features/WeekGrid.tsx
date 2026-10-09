@@ -115,7 +115,16 @@ export function WeekGrid({ days, showQuarterHours = true, courses, slots, teache
                   key={m}
                   aria-hidden
                   data-quarter
-                  style={{ position: 'absolute', left: 0, right: 0, top: (m - start) * PX_PER_MIN, borderTop: '1px dotted #f0f0f0', pointerEvents: 'none' }}
+                  // Visibles sur fond blanc (l'ancien #f0f0f0 rendait la case « Quarts d'heure »
+                  // sans effet apparent) ; la demi-heure un peu plus marquée que les quarts.
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: (m - start) * PX_PER_MIN,
+                    borderTop: m % 30 === 0 ? '1px dashed #c4c9d1' : '1px dotted #d3d7de',
+                    pointerEvents: 'none',
+                  }}
                 />
               ))}
             {(placedByDay.get(ymd(d)) ?? []).map(({ course: c, start: from, end: to, lane, lanes }) => {

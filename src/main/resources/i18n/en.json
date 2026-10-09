@@ -319,5 +319,12 @@
   "edt.form.error.past": "This course would start in the past.",
   "edt.form.error.server": "The course could not be created. Try again, or contact your school administrator if the problem persists.",
   "edt.form.resources": "Room or equipment to book",
-  "edt.form.category.mismatch": "[[0]] does not match the room type expected for [[2]] ([[1]]). You can still save."
+  "edt.form.category.mismatch": "[[0]] does not match the room type expected for [[2]] ([[1]]). You can still save.",
+  "edt.form.resource.none": "No attached document.",
+  "edt.form.resource.duplicates": "Some documents were already attached: only the new ones were added.",
+  "edt.form.resource.mediacentre": "Media centre",
+  "edt.form.resource.add": "Add",
+  "edt.form.resource.added": "Already added",
+  "edt.form.mediacentre.error": "The media centre search failed. Try again later.",
+  "edt.form.close": "Close"
 }

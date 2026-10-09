@@ -321,6 +321,24 @@ export const isResourceBusy = async (structureId: string, resource: { id: number
   return Array.isArray(rbs) && rbs.some(isRealBooking);
 };
 
+// ── Médiacentre (documents attachés au cours) ──────────────────────────────────
+/** Sources interrogées, comme l'IHM AngularJS : GAR, Signet, Moodle, PMB. */
+const MEDIACENTRE_SOURCES = [
+  'fr.openent.mediacentre.source.GAR',
+  'fr.openent.mediacentre.source.Signet',
+  'fr.openent.mediacentre.source.Moodle',
+  'fr.openent.mediacentre.source.PMB',
+];
+
+/** Recherche plein texte dans le médiacentre ; une trame par source (cf. parseMediacentreFrames). */
+export const searchMediacentre = async (query: string): Promise<unknown[]> => {
+  const jsondata = JSON.stringify({ state: 'PLAIN_TEXT', event: 'search', sources: MEDIACENTRE_SOURCES, data: { query } });
+  const res = await fetch(`/mediacentre/search?jsondata=${encodeURIComponent(jsondata)}`, base);
+  if (!res.ok) throw new Error(String(res.status));
+  const body = (await res.json()) as unknown[] | null;
+  return Array.isArray(body) ? body : [];
+};
+
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
 /** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
 export const getStructurePreference = async (): Promise<{ id?: string; name?: string }> => {
@@ -408,6 +426,7 @@ export const api = {
   getRbsResourceList,
   getRoomCategory,
   isResourceBusy,
+  searchMediacentre,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,

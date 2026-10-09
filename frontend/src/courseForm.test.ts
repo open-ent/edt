@@ -83,6 +83,11 @@ describe('cours envoyé au serveur', () => {
     expect(p.exceptionnal).toBeUndefined();
   });
 
+  it('envoie les documents attachés', () => {
+    const doc = { type: 'workspace' as const, id: 'a1', name: 'Exercices.pdf', url: '/workspace/document/a1' };
+    expect(toCoursePayload({ ...valid, resources: [doc] }, slots, 'x', NOW).resources).toEqual([doc]);
+  });
+
   it('matière personnalisée : subjectId nul, texte envoyé ; horaire libre sans plage', () => {
     const p = toCoursePayload({ ...valid, isExceptional: true, exceptional: ' Sortie théâtre ', freeSchedule: true, startTime: '13:30', endTime: '15:00' }, slots, 'x', NOW);
     expect(p).toMatchObject({ subjectId: null, exceptionnal: 'Sortie théâtre', startDate: '2026-10-12T13:30:00', endDate: '2026-10-12T15:00:00' });
