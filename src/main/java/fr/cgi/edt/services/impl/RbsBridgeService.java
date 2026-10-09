@@ -179,7 +179,9 @@ public class RbsBridgeService {
                     conflicts.add(new JsonObject().put("courseId", courseId).put("conflictResourceIds", conflictResourceIds));
                 }
 
-                if (courseId == null || bookingIds.isEmpty()) { checkDone.run(); return; }
+                // Toujours persister, même vide : sinon le cours garde les ids de réservations
+                // supprimées juste avant (modification d'un cours dont la salle est prise ailleurs).
+                if (courseId == null) { checkDone.run(); return; }
 
                 MongoUpdateBuilder update = new MongoUpdateBuilder();
                 update.set(Field.RBS_BOOKING_IDS, bookingIds);
@@ -206,7 +208,20 @@ public class RbsBridgeService {
      * @param userId    utilisateur agissant (doit être propriétaire des réservations côté RBS)
      */
     public static void deleteBookings(EventBus eb, JsonArray bookingIds, String userId) {
-        if (eb == null || bookingIds == null || bookingIds.isEmpty() || userId == null) return;
+        deleteBookingsThen(eb, bookingIds, userId);
+    }
+
+    /**
+     * Comme {@link #deleteBookings}, mais signale la fin de la suppression (succès ou échec) :
+     * à attendre avant de recréer les réservations d'un cours modifié, sinon la nouvelle
+     * réservation bute sur l'ancienne. Ex. cours 16:15-17:00 allongé à 17:30 dans la même salle.
+     */
+    public static Future<Void> deleteBookingsThen(EventBus eb, JsonArray bookingIds, String userId) {
+        Promise<Void> done = Promise.promise();
+        if (eb == null || bookingIds == null || bookingIds.isEmpty() || userId == null) {
+            done.complete();
+            return done.future();
+        }
 
         JsonObject msg = new JsonObject()
                 .put("action",   "delete-bookings")
@@ -219,7 +234,9 @@ public class RbsBridgeService {
             } else {
                 log.info("[EDT@RbsBridgeService] RBS bookings deleted: " + bookingIds);
             }
+            done.complete();
         });
+        return done.future();
     }
 
     /**

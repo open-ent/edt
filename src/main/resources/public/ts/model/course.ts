@@ -76,8 +76,14 @@ export class Course {
 
     async update(): Promise<any> {
         try {
-            let url = `/edt/courses/${this.recurrence ? `recurrences/${this.recurrence}` : this._id}`;
-            const {data} = await http.put(url, this.toJSON());
+            if (this.recurrence) {
+                const {data} = await http.put(`/edt/courses/recurrences/${this.recurrence}`, this.toJSON());
+                return data;
+            }
+            // Un seul cours : PUT /edt/course (tableau), qui déplace aussi les réservations RBS
+            // (anciennes supprimées, nouvelles créées, conflits renvoyés dans rbsConflicts) — comme
+            // l'IHM React. PUT /edt/courses/:id laissait la salle réservée sur l'ancien créneau.
+            const {data} = await http.put('/edt/course', [this.toJSON()]);
             return data;
         } catch (e) {
             notify.error('edt.notify.update.err');

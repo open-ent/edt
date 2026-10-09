@@ -199,6 +199,9 @@ export function WeekGrid({ days, showQuarterHours = true, actions, courses, slot
                       actions={actions}
                       // Cours de seconde moitié de journée : détail au-dessus, sinon il sort de la grille.
                       above={from - start > (end - start) / 2}
+                      // Ouvert au simple survol : transparent aux clics, sinon il masque les cours
+                      // recouverts (ex. détail du cours de 08:00-12:00 posé sur celui de 16:15).
+                      interactive={openId === c._id}
                     />
                   )}
                 </div>
@@ -221,6 +224,8 @@ interface DetailsProps {
   actions?: CourseActions;
   /** Ouvrir le détail au-dessus du cours plutôt qu'en dessous. */
   above?: boolean;
+  /** Ouvert par un clic (boutons utilisables) ; faux pour un détail de survol. */
+  interactive?: boolean;
 }
 
 /** Modifier / supprimer depuis le détail d'un cours ; absent pour qui ne gère pas les cours. */
@@ -230,7 +235,7 @@ export interface CourseActions {
 }
 
 /** Détail d'un cours, contenu identique à l'infobulle AngularJS (template/calendar/course-tooltip.html). */
-export function CourseDetails({ course: c, subject, from, to, teacherName, rbsName, actions, above = false }: DetailsProps) {
+export function CourseDetails({ course: c, subject, from, to, teacherName, rbsName, actions, above = false, interactive = true }: DetailsProps) {
   const { t } = useTranslation(['edt', 'common']);
   const teachers = (c.teacherIds ?? []).map(teacherName).filter(Boolean);
   const rooms = (c.roomLabels ?? []).filter((r) => r);
@@ -249,6 +254,7 @@ export function CourseDetails({ course: c, subject, from, to, teacherName, rbsNa
         color: '#222',
         fontSize: 13,
         zIndex: 30,
+        pointerEvents: interactive ? 'auto' : 'none',
       }}
     >
       <div className="fw-bold mb-4" style={{ borderLeft: `4px solid ${groupColor(c.color)}`, paddingLeft: 6 }}>{subject}</div>

@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class EdtMongoHelper extends MongoDbCrudService {
@@ -71,6 +72,10 @@ public class EdtMongoHelper extends MongoDbCrudService {
         for (int i = 0; i < values.size(); i++) {
             obj = values.getJsonObject(i);
             if (!obj.containsKey("_id")) {
+                // Identifiant attribué AVANT l'insertion, dans l'objet reçu : la synchronisation RBS
+                // qui suit en a besoin pour rattacher les réservations au cours (rbsBookingIds),
+                // sinon elles ne sont jamais libérées. Ex. cours créé en salle 201, puis supprimé.
+                obj.put("_id", UUID.randomUUID().toString());
                 mongo.save(collection, obj, transactionHandler);
             } else {
                 updateCourse(obj,transactionHandler);

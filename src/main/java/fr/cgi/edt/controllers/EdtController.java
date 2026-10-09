@@ -250,10 +250,12 @@ public class EdtController extends MongoDbControllerHelper {
                         edtService.update(body, result -> {
                             if (result.isRight()) {
                                 JsonObject responseBody = result.right().getValue();
-                                if (!oldBookingIds.isEmpty())
-                                    RbsBridgeService.deleteBookings(eb, oldBookingIds, user != null ? user.getUserId() : null);
                                 if (user != null) {
-                                    RbsBridgeService.syncBookings(eb, body, user.getUserId()).onComplete(ar -> {
+                                    // Anciennes réservations supprimées AVANT de recréer les nouvelles :
+                                    // sinon un cours allongé dans la même salle bute sur sa propre réservation.
+                                    RbsBridgeService.deleteBookingsThen(eb, oldBookingIds, user.getUserId())
+                                        .compose(v -> RbsBridgeService.syncBookings(eb, body, user.getUserId()))
+                                        .onComplete(ar -> {
                                         JsonArray rbsConflicts = ar.succeeded() ? ar.result() : new JsonArray();
                                         if (!rbsConflicts.isEmpty()) responseBody.put("rbsConflicts", rbsConflicts);
                                         renderJson(request, responseBody);
