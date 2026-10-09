@@ -242,5 +242,18 @@
   "edt.resources.mediacentre.search.placeholder": "Search a resource in the mediacentre",
   "edt.resources.mediacentre.loading": "Searching…",
   "edt.resources.mediacentre.empty": "Type a term then start the search.",
-  "edt.resources.mediacentre.noresult": "No resource found."
+  "edt.resources.mediacentre.noresult": "No resource found.",
+  "edt.switch.invitation.title": "A new version of the Timetable is available.",
+  "edt.switch.invitation.body": "Same timetable, same courses: only the layout changes.",
+  "edt.switch.invitation.try": "Try it",
+  "edt.switch.invitation.later": "Later",
+  "edt.switch.return.title": "You are using the new version of the Timetable.",
+  "edt.switch.return.back": "Back to the previous version",
+  "edt.switch.return.dismiss": "Don't show again",
+  "edt.switch.return.where": "You can change this at any time from your",
+  "edt.switch.return.settings": "account settings",
+  "edt.switch.feedback.question": "What are you missing?",
+  "edt.switch.feedback.placeholder": "In one sentence (optional)",
+  "edt.switch.feedback.send": "Send and go back",
+  "edt.switch.feedback.skip": "Go back without answering"
 }

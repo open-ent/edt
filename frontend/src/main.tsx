@@ -7,6 +7,7 @@ import { router } from './routes';
 
 import './i18n';
 import '@open-ent/bootstrap/dist/index.css';
+import './index.css';
 
 // L'`@import url("/theme/brand.css")` du CSS ci-dessus est retiré au build (cf.
 // vite.config.ts) pour éviter que Vite ne l'inline : on recharge la feuille de

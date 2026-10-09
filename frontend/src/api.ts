@@ -163,4 +163,56 @@ export const createCourse = async (data: {
   if (!res.ok) throw new Error(String(res.status));
 };
 
-export const api = { getClasses, getMatieres, getTimeSlots, getCoursesForClass, getCoursesForTeacher, createCourse };
+// ── Choix d'IHM (bascule AngularJS → React) ──────────────────────────────────
+/**
+ * Préférence `edtUi` : choix d'interface + état des bandeaux qui le proposent.
+ * Le serveur lit `ui` pour servir la bonne vue (EdtController#preferredUi). Pas de tiret dans la
+ * clé : entcore retire les caractères non alphanumériques avant d'en faire une propriété du graphe.
+ * Ex. `{ ui: 'react', invitationShown: 2, returnShown: 1 }`.
+ */
+export interface UiPreference {
+  /** Choix explicite de l'usager. Absent = la plateforme tranche. */
+  ui?: 'react' | 'angular';
+  /** « Plus tard » sur l'invitation affichée par l'IHM AngularJS (public/ui-switch.js). */
+  invitationDismissed?: boolean;
+  invitationShown?: number;
+  /** « Ne plus afficher » sur le bandeau de retour de l'IHM React. */
+  returnDismissed?: boolean;
+  returnShown?: number;
+  /** Réponse libre à « Qu'est-ce qui vous manque ? », au moment du retour en arrière. */
+  feedback?: string;
+  feedbackAt?: string;
+}
+
+export const getUiPreference = async (): Promise<UiPreference> => {
+  const res = await fetch('/userbook/preference/edtUi', base);
+  if (!res.ok) return {};
+  // L'enveloppe est `{ preference: "<json>" }` — une chaîne, pas un objet.
+  const body = (await res.json()) as { preference?: string } | null;
+  if (!body?.preference) return {};
+  try {
+    return (JSON.parse(body.preference) as UiPreference) ?? {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveUiPreference = async (preference: UiPreference): Promise<void> => {
+  await fetch('/userbook/preference/edtUi', {
+    ...base,
+    method: 'PUT',
+    headers: mutHeaders(),
+    body: JSON.stringify(preference),
+  });
+};
+
+export const api = {
+  getClasses,
+  getMatieres,
+  getTimeSlots,
+  getCoursesForClass,
+  getCoursesForTeacher,
+  createCourse,
+  getUiPreference,
+  saveUiPreference,
+};

@@ -1,0 +1,11 @@
+/* Bandeau de retour vers l'IHM AngularJS, pendant la cohabitation des deux interfaces.
+   Posé en bas de l'écran, hors du flux : il ne doit décaler aucune grille d'emploi du temps. */
+.edt-ui-switch {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1030;
+  width: min(640px, calc(100vw - 32px));
+  background: var(--openent-white, #fff);
+}

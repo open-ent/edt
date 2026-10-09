@@ -242,5 +242,18 @@
   "edt.resources.mediacentre.search.placeholder": "Rechercher une ressource dans le médiacentre",
   "edt.resources.mediacentre.loading": "Recherche en cours…",
   "edt.resources.mediacentre.empty": "Saisissez un terme puis lancez la recherche.",
-  "edt.resources.mediacentre.noresult": "Aucune ressource trouvée."
+  "edt.resources.mediacentre.noresult": "Aucune ressource trouvée.",
+  "edt.switch.invitation.title": "Une nouvelle version de l'Emploi du temps est disponible.",
+  "edt.switch.invitation.body": "Même emploi du temps, mêmes cours : seule la présentation change.",
+  "edt.switch.invitation.try": "L'essayer",
+  "edt.switch.invitation.later": "Plus tard",
+  "edt.switch.return.title": "Vous utilisez la nouvelle version de l'Emploi du temps.",
+  "edt.switch.return.back": "Revenir à l'ancienne version",
+  "edt.switch.return.dismiss": "Ne plus afficher",
+  "edt.switch.return.where": "Ce choix reste modifiable à tout moment depuis les",
+  "edt.switch.return.settings": "paramètres de votre compte",
+  "edt.switch.feedback.question": "Qu'est-ce qui vous manque ?",
+  "edt.switch.feedback.placeholder": "En une phrase (facultatif)",
+  "edt.switch.feedback.send": "Envoyer et revenir",
+  "edt.switch.feedback.skip": "Revenir sans répondre"
 }

@@ -27,7 +27,9 @@ import fr.wseduc.security.SecuredAction;
 import fr.wseduc.webutils.Either;
 import fr.wseduc.webutils.http.Renders;
 import fr.wseduc.webutils.request.RequestUtils;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpServerRequest;
@@ -65,6 +67,11 @@ public class EdtController extends MongoDbControllerHelper {
     private final EventStore eventStore;
     private EdtNotifyService notifyService;
 
+    /** Clé de préférence usager portant le choix d'IHM et l'état des bandeaux qui le proposent.
+     *  Ex. {"ui":"react","invitationShown":3} — lue par preferredUi(), écrite par public/ui-switch.js,
+     *  par le bandeau React et par les paramètres du compte du dashboard. */
+    private static final String UI_PREFERENCE = "edtUi";
+
 
 
     private static final String
@@ -97,18 +104,77 @@ public class EdtController extends MongoDbControllerHelper {
     @Get("")
     @SecuredAction(read_only)
     public void view(HttpServerRequest request) {
-        // CCTP 51C — bascule AngularJS/React. Défaut piloté par la conf `frontend-ui`
-        // (bloc du module dans ent-core.yaml, alimentée par FRONTEND_UI_DEFAULT ; fallback "angular"),
-        // surchargée à la demande par `?ui=react|angular`.
+        // Choix de l'IHM (CCTP 51C — migration React), par ordre de priorité décroissante :
+        //   1. `?ui=react|angular` — dérogation ponctuelle, NON mémorisée (vérification, support) ;
+        //   2. la préférence de l'usager (clé `edtUi`), posée par les bandeaux de bascule ou par
+        //      les paramètres du compte dans le dashboard ;
+        //   3. la conf `frontend-ui` du bloc edt dans ent-core.yaml (variable EDT_FRONTEND_UI).
+        // Ex. usager ayant choisi « Nouvelle version » : /edt → edt-react.html ; /edt?ui=angular → edt.html.
         final String uiParam = request.params().get("ui");
-        final String frontendUi = "react".equals(config.getString("frontend-ui", "angular")) ? "react" : "angular";
-        final String ui = ("react".equals(uiParam) || "angular".equals(uiParam)) ? uiParam : frontendUi;
-        if ("react".equals(ui)) {
-            renderView(request, new JsonObject(), "edt-react.html", null);
-        } else {
-            renderView(request);
+        final String forcedUi = ("react".equals(uiParam) || "angular".equals(uiParam)) ? uiParam : null;
+
+        UserUtils.getUserInfos(eb, request, user -> {
+            if (user == null) {
+                unauthorized(request);
+                return;
+            }
+            preferredUi(user.getUserId(), forcedUi).onSuccess(ui -> {
+                if ("react".equals(ui)) {
+                    renderView(request, new JsonObject(), "edt-react.html", null);
+                } else {
+                    renderView(request);
+                }
+                this.eventStore.createAndStoreEvent(EventStores.ACCESS, request);
+            });
+        });
+    }
+
+    /**
+     * IHM à servir : la dérogation d'URL si elle est présente, sinon le choix mémorisé par
+     * l'usager, sinon celui de la plateforme.
+     *
+     * Le choix est lu à sa source, le nœud {@code UserAppConf} du graphe (celui qu'écrit
+     * {@code PUT /userbook/preference/edtUi}) : ni la session ni le bus {@code userbook.preferences}
+     * ne restituent une clé écrite pendant la session en cours (constat fait sur l'agenda).
+     * Ex. préférence stockée {@code uac.edtUi = "{\"ui\":\"react\",\"invitationShown\":2}"} → "react".
+     *
+     * ⚠ Clé sans tiret ni point : entcore retire les caractères non alphanumériques avant d'en faire
+     * un nom de propriété Cypher (ex. {@code presences.register} est rangé en {@code uac.presencesregister}).
+     *
+     * Aucune panne de cette lecture ne doit empêcher l'emploi du temps de s'afficher : à la moindre
+     * difficulté, la plateforme tranche.
+     */
+    private Future<String> preferredUi(String userId, String forcedUi) {
+        if (forcedUi != null) return Future.succeededFuture(forcedUi);
+
+        final Promise<String> promise = Promise.promise();
+        final String query = "MATCH (:User {id:{userId}})-[:PREFERS]->(uac:UserAppConf) " +
+                "RETURN uac." + UI_PREFERENCE + " AS preference";
+        Neo4j.getInstance().execute(query, new JsonObject().put("userId", userId),
+                message -> promise.complete(readUi(message.body())));
+        return promise.future();
+    }
+
+    /** Extrait le choix d'IHM du résultat Neo4j — la préférence y est rangée en CHAÎNE JSON. */
+    private String readUi(JsonObject body) {
+        try {
+            final JsonArray rows = body.getJsonArray("result", new JsonArray());
+            if (rows.isEmpty()) return platformUi();
+            final String raw = rows.getJsonObject(0).getString("preference");
+            if (raw == null || raw.trim().isEmpty()) return platformUi();
+            final String ui = new JsonObject(raw).getString("ui");
+            return ("react".equals(ui) || "angular".equals(ui)) ? ui : platformUi();
+        } catch (Exception e) {
+            // Préférence illisible (écriture partielle, ancien format) ou graphe en échec :
+            // la plateforme tranche. Jamais d'erreur 500 pour un choix d'habillage.
+            LOGGER.warn("[Edt@readUi] préférence " + UI_PREFERENCE + " illisible", e);
+            return platformUi();
         }
-        this.eventStore.createAndStoreEvent(EventStores.ACCESS, request);
+    }
+
+    /** IHM de la plateforme quand l'usager n'a rien choisi ; repli "angular", dont la parité est acquise. */
+    private String platformUi() {
+        return "react".equals(config.getString("frontend-ui", "angular")) ? "react" : "angular";
     }
 
     private Handler<Either<String, JsonObject>> getServiceHandler (final HttpServerRequest request) {

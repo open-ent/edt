@@ -7,6 +7,8 @@ import {
 } from '@open-ent/react';
 import { Outlet } from 'react-router-dom';
 
+import { UiSwitchBanner } from '../features/UiSwitchBanner';
+
 /** Gabarit commun : bandeau ENT (Layout + AppHeader + fil d'Ariane) + contenu. */
 export function Root() {
   const { currentApp, init } = useEdificeClient();
@@ -24,6 +26,7 @@ export function Root() {
           </div>
         </div>
       </Layout>
+      <UiSwitchBanner />
     </div>
   );
 }
