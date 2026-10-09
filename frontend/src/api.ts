@@ -2,11 +2,24 @@
 // Incrément 1 : lecture seule des cours d'une classe sur une semaine.
 // Le référentiel classes/matières est fourni par le module viescolaire (même établissement).
 
-export interface Klass {
+/**
+ * Classe ou groupe de l'établissement, tel que renvoyé par `/viescolaire/classes?isEdt=true`.
+ * Ex. `{ id: "a1…", name: "4A", type_groupe: 0, color: "#4bafd5", isInCurrentTeacher: true }`.
+ */
+export interface Group {
   id: string;
   name: string;
   externalId?: string;
+  /** 0 classe, 1 groupe d'enseignement, 2 groupe manuel. */
+  type_groupe: number;
+  /** Couleur attribuée à la classe dans l'emploi du temps (absente sans `isEdt=true`). */
+  color?: string;
+  /** Classe ou groupe de l'enseignant connecté (« ma classe »). */
+  isInCurrentTeacher: boolean;
 }
+
+/** Ancien nom, conservé pour les appels existants qui n'utilisent que id/name/externalId. */
+export type Klass = Pick<Group, 'id' | 'name' | 'externalId'>;
 
 export interface Matiere {
   id: string;
@@ -69,10 +82,57 @@ export const getTimeSlots = async (structureId: string): Promise<TimeSlot[]> =>
     [...arr].sort((a, b) => (a.startHour || '').localeCompare(b.startHour || '')),
   );
 
-export const getClasses = async (structureId: string): Promise<Klass[]> =>
-  json<Array<{ id: string; name: string; externalId?: string }>>(
-    await fetch(`/viescolaire/classes?idEtablissement=${structureId}`, base),
-  ).then((arr) => arr.map((c) => ({ id: c.id, name: c.name, externalId: c.externalId })));
+type RawGroup = { id: string; name: string; externalId?: string; type_groupe?: number; color?: string };
+
+const toGroup = (g: RawGroup, isInCurrentTeacher: boolean): Group => ({
+  id: g.id,
+  name: g.name,
+  externalId: g.externalId,
+  type_groupe: g.type_groupe ?? 0,
+  color: g.color,
+  isInCurrentTeacher,
+});
+
+/**
+ * Classes et groupes de l'établissement, comme l'IHM AngularJS (`model/group.ts`).
+ * `isEdt=true` ajoute la couleur et évite l'enrichissement « services » inutile ici.
+ * Un enseignant ne reçoit sans `isTeacherEdt=true` que SES classes (côté vie-scolaire,
+ * `forAdmin = Personnel || isTeacherEdt`) : on demande donc ses classes, marquées « ma classe »,
+ * puis toutes celles de l'établissement. Ex. enseignant de 4A : 4A (ma classe), puis 3A, 3B, 4B…
+ */
+export const getGroups = async (structureId: string, isTeacher: boolean): Promise<Group[]> => {
+  const url = `/viescolaire/classes?idEtablissement=${structureId}&isEdt=true`;
+  if (!isTeacher) {
+    return json<RawGroup[]>(await fetch(url, base)).then((arr) => (arr ?? []).map((g) => toGroup(g, false)));
+  }
+  const mine = (await json<RawGroup[]>(await fetch(url, base))) ?? [];
+  const all = (await json<RawGroup[]>(await fetch(`${url}&isTeacherEdt=true`, base))) ?? [];
+  const mineIds = new Set(mine.map((g) => g.id));
+  return [...mine.map((g) => toGroup(g, true)), ...all.filter((g) => !mineIds.has(g.id)).map((g) => toGroup(g, false))];
+};
+
+// ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
+/** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
+export const getStructurePreference = async (): Promise<{ id?: string; name?: string }> => {
+  const res = await fetch('/userbook/preference/edt.structure', base);
+  if (!res.ok) return {};
+  const body = (await res.json()) as { preference?: string } | null;
+  if (!body?.preference) return {};
+  try {
+    return (JSON.parse(body.preference) as { id?: string; name?: string }) ?? {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveStructurePreference = async (structure: { id: string; name: string }): Promise<void> => {
+  await fetch('/userbook/preference/edt.structure', {
+    ...base,
+    method: 'PUT',
+    headers: mutHeaders(),
+    body: JSON.stringify(structure),
+  });
+};
 
 export const getMatieres = async (structureId: string): Promise<Matiere[]> =>
   json<Array<{ id: string; name: string }>>(
@@ -207,7 +267,9 @@ export const saveUiPreference = async (preference: UiPreference): Promise<void> 
 };
 
 export const api = {
-  getClasses,
+  getGroups,
+  getStructurePreference,
+  saveStructurePreference,
   getMatieres,
   getTimeSlots,
   getCoursesForClass,

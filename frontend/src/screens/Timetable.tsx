@@ -1,10 +1,11 @@
-import { useEdificeClient } from '@open-ent/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { api, Course, Klass } from '../api';
+import { api, Course, Group } from '../api';
+import { composesOwnFilter, sortGroups } from '../context';
+import { useEdtContext } from '../hooks/useEdtContext';
 import { addDays, courseSortKey, dayLabel, hhmm, mondayOf, weekLabel, ymd } from '../utils';
 
 const JOURS: Array<{ dow: number; label: string }> = [
@@ -18,9 +19,10 @@ const JOURS: Array<{ dow: number; label: string }> = [
 /** Emploi du temps d'une classe sur une semaine (liste ou grille horaire). */
 export function Timetable() {
   const { t } = useTranslation(['edt', 'common']);
-  const { user, init } = useEdificeClient();
+  const ctx = useEdtContext();
   const qc = useQueryClient();
-  const structureId = user?.structures?.[0] ?? '';
+  const structureId = ctx.structure?.id ?? '';
+  const isTeacher = ctx.profile === 'teacher';
 
   // Lien profond depuis le dashboard (widget "prochain cours") : #/?date=YYYY-MM-DD&start=HH:MM
   // ouvre directement la bonne semaine et met en évidence le créneau visé.
@@ -38,18 +40,22 @@ export function Timetable() {
   });
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
-  const classesQuery = useQuery({ queryKey: ['edt', 'classes', structureId], queryFn: () => api.getClasses(structureId), enabled: !!structureId });
+  const groupsQuery = useQuery({
+    queryKey: ['edt', 'groups', structureId, isTeacher],
+    queryFn: () => api.getGroups(structureId, isTeacher),
+    enabled: !!structureId && composesOwnFilter(ctx.profile),
+  });
   const matieresQuery = useQuery({ queryKey: ['edt', 'matieres', structureId], queryFn: () => api.getMatieres(structureId), enabled: !!structureId });
   const slotsQuery = useQuery({ queryKey: ['edt', 'timeslots', structureId], queryFn: () => api.getTimeSlots(structureId), enabled: !!structureId });
 
-  const teacherId = (user as { userId?: string; id?: string } | undefined)?.userId ?? (user as { id?: string } | undefined)?.id ?? '';
+  const teacherId = ctx.userId;
   const isMine = classId === '__me__';
 
-  // Parité Angular : afficher d'emblée l'emploi du temps de l'utilisateur connecté
-  // (au lieu d'un état vide tant qu'aucune classe n'est choisie).
+  // Comme l'Angular : un enseignant voit d'emblée son propre emploi du temps, le personnel part
+  // d'une sélection vide. Repris à chaque changement d'établissement (la sélection n'y a plus cours).
   useEffect(() => {
-    if (teacherId) setClassId((prev) => (prev === '' ? '__me__' : prev));
-  }, [teacherId]);
+    setClassId(isTeacher && teacherId ? '__me__' : '');
+  }, [structureId, isTeacher, teacherId]);
 
   // Création d'un cours ponctuel (parité Angular « Créer un cours », POST /edt/course).
   const [creating, setCreating] = useState(false);
@@ -77,8 +83,9 @@ export function Timetable() {
     },
   });
   const newCourseValid = !!(newSubjectId && newClassName && newDate && newStart && newEnd && teacherId);
-  const classes = classesQuery.data ?? [];
-  const selectedClass: Klass | undefined = classes.find((c) => c.id === classId);
+  const classes = useMemo(() => sortGroups(groupsQuery.data ?? []), [groupsQuery.data]);
+  const selectedClass: Group | undefined = classes.find((c) => c.id === classId);
+  const groupLabel = (g: Group) => (g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
   const slots = slotsQuery.data ?? [];
   const courseTitle = (c: Course) => c.subjectLabel ?? (c.subjectId ? subjectName.get(c.subjectId) ?? c.subjectId : '');
@@ -128,12 +135,25 @@ export function Timetable() {
     return m;
   }, [courses, slots]);
 
-  if (init && !structureId) {
+  if (ctx.ready && ctx.structures.length === 0) {
     return (
       <div>
-        <h1>{t('edt.title', { defaultValue: 'Emploi du temps' })}</h1>
+        <h1>{t('edt.timetable.title')}</h1>
         <div className="alert alert-info" role="alert">
-          {t('edt.no.structure', { defaultValue: 'Aucun établissement associé à votre compte.' })}
+          {t('edt.no.structure')}
+        </div>
+      </div>
+    );
+  }
+
+  if (ctx.ready && !composesOwnFilter(ctx.profile)) {
+    // Élève et parent : leur emploi du temps (groupes de l'élève, choix de l'enfant) arrive avec
+    // l'incrément I6 de la migration ; en attendant, renvoi vers la version précédente.
+    return (
+      <div>
+        <h1>{t('edt.timetable.title')}</h1>
+        <div className="alert alert-info" role="alert">
+          {t('edt.timetable.student.pending')} <a href="/edt?ui=angular">{t('edt.timetable.previous.version')}</a>
         </div>
       </div>
     );
@@ -142,8 +162,8 @@ export function Timetable() {
   return (
     <div>
       <div className="d-flex align-items-center justify-content-between mb-16 flex-wrap gap-8">
-        <h1 className="m-0">{t('edt.title', { defaultValue: 'Emploi du temps' })}</h1>
-        {!creating && teacherId && (
+        <h1 className="m-0">{t('edt.timetable.title')}</h1>
+        {!creating && ctx.canManage && (
           <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
             {t('edt.course.new', { defaultValue: 'Créer un cours' })}
           </button>
@@ -171,7 +191,7 @@ export function Timetable() {
               <label htmlFor="nc-class" className="form-label">{t('edt.class', { defaultValue: 'Classe' })}</label>
               <select id="nc-class" className="form-select" value={newClassName} onChange={(e) => setNewClassName(e.target.value)} required>
                 <option value="">—</option>
-                {classes.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                {classes.map((c) => <option key={c.id} value={c.name}>{groupLabel(c)}</option>)}
               </select>
             </div>
             <div>
@@ -205,12 +225,34 @@ export function Timetable() {
 
       {/* Barre de contrôle : classe + navigation semaine */}
       <div className="d-flex gap-16 flex-wrap align-items-end mb-16">
+        {ctx.structures.length > 1 && (
+          <div>
+            <label htmlFor="edt-structure" className="form-label">{t('edt.timetable.structure')}</label>
+            <select
+              id="edt-structure"
+              className="form-select"
+              value={structureId}
+              onChange={(e) => ctx.selectStructure(e.target.value)}
+            >
+              {ctx.structures.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label htmlFor="edt-class" className="form-label">{t('edt.class', { defaultValue: 'Classe' })}</label>
           <select id="edt-class" className="form-select" value={classId} onChange={(e) => setClassId(e.target.value)}>
             <option value="">{t('edt.class.choose', { defaultValue: 'Choisir…' })}</option>
-            {teacherId && <option value="__me__">{t('edt.mine', { defaultValue: 'Mon emploi du temps' })}</option>}
-            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {isTeacher && teacherId && <option value="__me__">{t('edt.timetable.mine')}</option>}
+            {[
+              { label: t('edt.timetable.groups.classes'), items: classes.filter((c) => c.type_groupe === 0) },
+              { label: t('edt.timetable.groups.groups'), items: classes.filter((c) => c.type_groupe !== 0) },
+            ]
+              .filter((section) => section.items.length > 0)
+              .map((section) => (
+                <optgroup key={section.label} label={section.label}>
+                  {section.items.map((c) => <option key={c.id} value={c.id}>{groupLabel(c)}</option>)}
+                </optgroup>
+              ))}
           </select>
         </div>
         <div className="d-flex gap-8 align-items-center">
