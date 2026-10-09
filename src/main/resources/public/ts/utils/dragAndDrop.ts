@@ -91,7 +91,11 @@ export class DragAndDrop {
                     $dragging = DragAndDrop.takeSchedule(e, $timeslots);
                     startPosition = $dragging.offset();
                     let calendar: JQuery = $('calendar');
-                    calendar.off('mousemove', (e: JQueryEventObject): void => DragAndDrop.moveScheduleItem(e, $dragging));
+                    // .off('mousemove') SANS référence de fonction : la fonction ci-dessous est
+                    // une nouvelle closure à chaque appel, donc .off(event, fn) ne retirait JAMAIS
+                    // le handler précédent (référence différente = no-op silencieux) — accumulation
+                    // d'un nouveau listener 'mousemove' sur <calendar> à chaque clic-glisser.
+                    calendar.off('mousemove');
                     calendar.on('mousemove', (e: JQueryEventObject): void => DragAndDrop.moveScheduleItem(e, $dragging));
                 }
             };
@@ -153,30 +157,44 @@ export class DragAndDrop {
 
             let $body: JQuery = $('body');
 
+            // IMPORTANT : .off(event, selector) SANS 3e argument (référence de fonction) partout
+            // ci-dessous. Ces gestionnaires sont redéfinis en `const` À CHAQUE appel de init() —
+            // .off(event, selector, fn) ne pouvait donc JAMAIS retirer le handler d'un appel
+            // précédent (référence différente = no-op silencieux) : ils s'accumulaient sur
+            // $('body') à chaque retour à l'écran principal (après chaque sauvegarde de cours,
+            // etc.), rendant les clics de plus en plus lents puis totalement bloqués ailleurs sur
+            // la page après suffisamment de cycles. .off(event, selector) retire TOUS les
+            // handlers déjà posés pour ce couple événement/sélecteur, quelle que soit leur
+            // référence — sûr ici puisque ce couple événement/sélecteur n'est utilisé QUE par ce
+            // fichier.
+
             // Left click + drag on course
-            $body.off('mousemove', 'calendar hr', mousemoveCalendarHr);
+            $body.off('mousemove', 'calendar hr');
             $body.on('mousemove', 'calendar hr', mousemoveCalendarHr);
 
             // Left click on course edit icon
-            $body.off('mousedown', '.one.cell.edit-icone', mouseDownEditIcon);
+            $body.off('mousedown', '.one.cell.edit-icone');
             $body.on('mousedown', '.one.cell.edit-icone', mouseDownEditIcon);
 
             // Left click on course
-            $body.off('mousedown', 'calendar .schedule-item', mousedownCalendarScheduleItem);
+            $body.off('mousedown', 'calendar .schedule-item');
             $body.on('mousedown', 'calendar .schedule-item', mousedownCalendarScheduleItem);
             $('body calendar .schedule-item').css('cursor', 'move');
 
             // Right click on course
+            $body.off('mousedown', '.schedule-item-content');
             $body.on('mousedown', '.schedule-item-content', prepareToDelete);
+            $body.off('mousedown', '.schedule-item-content.selected');
             $body.on('mousedown', '.schedule-item-content.selected', cancelDelete);
+            $body.off('mousedown', '.schedule-item-content.cantDelete');
             $body.on('mousedown', '.schedule-item-content.cantDelete', cancelDelete);
 
             // Release left click on calendar (ending drag of course)
-            $body.off('mouseup', 'calendar', mouseupCalendar);
+            $body.off('mouseup', 'calendar');
             $body.on('mouseup', 'calendar', mouseupCalendar);
 
-            // Press key
-            $body.off('keydown', keyDownCalendar);
+            // Press key (binding directe, pas déléguée : pas de sélecteur)
+            $body.off('keydown');
             $body.on('keydown', keyDownCalendar);
 
             // Prevent selection of text when pressing CTRL + A

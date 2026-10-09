@@ -96,8 +96,14 @@ public class DefaultCourseService implements CourseService {
                 .put("union", union != null ? union.toString() : null);
 
         eb.request(Edt.EB_VIESCO_ADDRESS, action, event -> {
+            if (event.failed()) {
+                LOGGER.error("[Edt@DefaultCourseService::getCoursesOccurrences] Failed to reach " +
+                        Edt.EB_VIESCO_ADDRESS + " : " + event.cause().getMessage(), event.cause());
+                promise.fail(event.cause().getMessage());
+                return;
+            }
             JsonObject body = (JsonObject) event.result().body();
-            if (event.succeeded() && "ok".equals(body.getString("status"))) {
+            if ("ok".equals(body.getString("status"))) {
                 final JsonArray resultsArray = body.getJsonArray("results", new JsonArray());
                 final List<JsonObject> results = new ArrayList<>();
                 for (int i = 0; i < resultsArray.size(); i++) {
@@ -105,7 +111,7 @@ public class DefaultCourseService implements CourseService {
                 }
                 promise.complete(results);
             } else {
-                promise.fail(event.cause().getMessage());
+                promise.fail(body.getString("message", "unknown error"));
             }
         });
         return promise.future();

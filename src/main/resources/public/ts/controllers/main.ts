@@ -877,6 +877,14 @@ export let main = ng.controller("EdtController", [
       $scope.updateDatas();
     };
 
+    /**
+     * Select every available group/class filter
+     */
+    $scope.selectAllFilters = (): void => {
+      $scope.params.group = angular.copy($scope.structure.groups.all);
+      $scope.updateDatas();
+    };
+
     $scope.getMomentFromDate = function (date, time) {
       return moment([
         date.getFullYear(),
@@ -1029,7 +1037,17 @@ export let main = ng.controller("EdtController", [
       main: (): void => {
         template.open("main", "main/main");
         initTimeSlots();
-        changeDatesOnSunday();
+        // Retour depuis l'écran d'édition d'un cours (manageCourse.ts::goToCalendarPreservingWeek) :
+        // restaure la semaine que l'utilisateur consultait avant l'ouverture du cours, au lieu de
+        // toujours retomber sur "aujourd'hui" (changeDatesOnSunday, comportement par défaut pour
+        // toute autre entrée sur cette route).
+        const returnDate = $location.search().returnDate;
+        if (returnDate) {
+          model.calendar.setDate(moment(returnDate, "x"));
+          $location.search("returnDate", null);
+        } else {
+          changeDatesOnSunday();
+        }
         if (!$scope.pageInitialized) {
           setTimeout((): void => {
             initTriggers(true);
@@ -1080,6 +1098,18 @@ export let main = ng.controller("EdtController", [
 
         $scope.course = new Course($scope.course);
         $scope.course.mapWithStructure(window.structure);
+        // La grille (worker de génération d'occurrences) ne renvoie pas les documents attachés
+        // ni les ressources RBS : on recharge ces deux champs depuis le document complet en base
+        // pour (1) les afficher et (2) éviter de les écraser à l'enregistrement (sinon toJSON
+        // renverrait resources:[]/rbsResourceIds:[]).
+        try {
+          const fullCourse: any = await courseService.getCourse($scope.course._id);
+          $scope.course.resources = (fullCourse && fullCourse.resources) ? fullCourse.resources : [];
+          $scope.course.rbsResourceIds = (fullCourse && fullCourse.rbsResourceIds) ? fullCourse.rbsResourceIds : [];
+        } catch (e) {
+          if (!$scope.course.resources) $scope.course.resources = [];
+          if (!$scope.course.rbsResourceIds) $scope.course.rbsResourceIds = [];
+        }
         $scope.initDateCreatCourse(params, $scope.course);
         if ($scope.course.is_recurrent && params.type !== "occurrence") {
           let recurrenceObject = $scope.course.recurrenceObject;

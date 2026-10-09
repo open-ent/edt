@@ -47,6 +47,15 @@ export class Course {
     display: any;
     recurrenceObject: any;
     timeToDelete?: Array<string>;
+    // Documents attachés (espace documentaire + médiacentre). Persisté tel quel dans Mongo
+    // (schemaless) ; le constructeur générique le relit, toJSON() le renvoie.
+    resources: Array<any> = [];
+    // Ressources RBS (réservation de ressources) liées à ce cours — coexiste avec roomLabels
+    // (texte libre), ne le remplace pas.
+    rbsResourceIds: Array<number> = [];
+    // Libellés résolus des rbsResourceIds (nom de la ressource RBS), calculés côté front par
+    // CalendarItems.sync() pour l'affichage (infobulle du calendrier) — jamais persisté.
+    rbsResourceLabels: Array<string> = [];
 
     constructor(obj?: object) {
         if (obj && obj instanceof Object) {
@@ -57,26 +66,28 @@ export class Course {
         }
     }
 
-    async save() {
-        if (this._id) await this.update();
-        else await this.create();
-
+    // Retourne la réponse serveur (peut porter `rbsConflicts` : ressources RBS demandées mais non
+    // réservées, cf edt.notify.rbs.conflict côté manageCourse.ts) au lieu de void, pour que
+    // l'appelant puisse prévenir l'enseignant plutôt que d'échouer silencieusement.
+    async save(): Promise<any> {
+        if (this._id) return await this.update();
+        else return await this.create();
     }
 
-    async update() {
+    async update(): Promise<any> {
         try {
             let url = `/edt/courses/${this.recurrence ? `recurrences/${this.recurrence}` : this._id}`;
-            await http.put(url, this.toJSON());
-            return;
+            const {data} = await http.put(url, this.toJSON());
+            return data;
         } catch (e) {
             notify.error('edt.notify.update.err');
         }
     }
 
-    async create() {
+    async create(): Promise<any> {
         try {
-            await http.post('/edt/course', [this.toJSON()]);
-            return;
+            const {data} = await http.post('/edt/course', [this.toJSON()]);
+            return data;
         } catch (e) {
             notify.error('edt.notify.create.err');
             console.error(e);
@@ -158,7 +169,9 @@ export class Course {
             everyTwoWeek: this.everyTwoWeek,
             exceptionnal: (this.exceptionnal) ? this.exceptionnal : undefined,
             updated: moment(),
-            lastUser: model.me.login
+            lastUser: model.me.login,
+            resources: this.resources || [],
+            rbsResourceIds: this.rbsResourceIds || []
         };
 
         if (!this.structureId && this.structure && this.structure.id) {

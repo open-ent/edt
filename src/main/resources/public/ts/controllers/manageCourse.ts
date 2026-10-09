@@ -1,4 +1,5 @@
-import {_, moment, ng, idiom as lang} from 'entcore';
+import {_, moment, ng, idiom as lang, notify} from 'entcore';
+import {http} from 'entcore-toolkit';
 import {COMBO_LABELS, Course, CourseOccurrence, DAYS_OF_WEEK, Group,
         Structure, Subject, Subjects, Teacher, Utils} from '../model';
 import {TimeSlot, TimeSlots} from "../model/timeSlots";
@@ -12,6 +13,18 @@ declare const window: any;
 
 export let manageCourseCtrl = ng.controller('manageCourseCtrl',
     ['$scope', '$location', '$routeParams', "$timeout", "CourseTagService", ($scope, $location, $routeParams, $timeout, courseTagService: ICourseTagService) => {
+        // Retour vers l'agenda en préservant la semaine consultée avant l'ouverture de ce cours
+        // (portée par la route /edit/:type/:idCourse/:beginning?/:end?) : sans ça, le contrôleur
+        // de la vue principale (EdtController, route "main") réinitialise systématiquement la
+        // date affichée sur "aujourd'hui" (changeDatesOnSunday), qui n'a aucun rapport avec la
+        // semaine que l'utilisateur avait choisie avant de cliquer sur ce cours.
+        const goToCalendarPreservingWeek = (): void => {
+            if ($routeParams['beginning']) {
+                $location.search('returnDate', $routeParams.beginning);
+            }
+            $scope.goTo('/');
+        };
+
         $scope.timeSlotHourPeriod = TimeSlotHourPeriod;
         $scope.daysOfWeek = DAYS_OF_WEEK;
         $scope.comboLabels = COMBO_LABELS;
@@ -29,6 +42,400 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         $scope.courseTags = [];
         $scope.deleteOnlyOneCourse = true;
         $scope.isExceptional = false;
+
+        // ============================================================================
+        // Documents attachés au cours (espace documentaire + médiacentre)
+        // Calqué sur le module cahier de textes (diary). 100 % front : le champ
+        // course.resources est persisté tel quel dans Mongo (schemaless).
+        // ============================================================================
+        $scope.display = $scope.display || {};
+        if (!$scope.course.resources) { $scope.course.resources = []; }
+
+        // --- Espace documentaire (media-library) ---
+        $scope.openCourseResourcePicker = function (): void {
+            $scope.documents = [];
+            $scope.display.courseResourcePicker = true;
+        };
+        $scope.addCourseWorkspaceResources = function (): void {
+            const mlEls: any = document.getElementsByTagName('media-library');
+            let docs: any[] = [];
+            if (mlEls && mlEls.length) {
+                const mlScope: any = window.angular.element(mlEls[mlEls.length - 1]).scope();
+                docs = (mlScope && mlScope.documents) ? mlScope.documents : ($scope.documents || []);
+            } else {
+                docs = $scope.documents || [];
+            }
+            if (!$scope.course.resources) { $scope.course.resources = []; }
+            docs.forEach((doc: any) => {
+                const id: string = doc._id || doc.id;
+                const already: boolean = $scope.course.resources
+                    .some((r: any) => r.type === 'workspace' && r.id === id);
+                if (id && !already) {
+                    $scope.course.resources.push({
+                        type: 'workspace',
+                        id: id,
+                        name: doc.name || doc.title || id,
+                        url: '/workspace/document/' + id
+                    });
+                }
+            });
+            $scope.documents = [];
+            $scope.display.courseResourcePicker = false;
+            Utils.safeApply($scope);
+        };
+        $scope.removeCourseResource = function (index: number): void {
+            if ($scope.course.resources) { $scope.course.resources.splice(index, 1); }
+        };
+
+        // --- Médiacentre (recherche) ---
+        const MEDIACENTRE_SOURCES: string[] = [
+            'fr.openent.mediacentre.source.GAR',
+            'fr.openent.mediacentre.source.Signet',
+            'fr.openent.mediacentre.source.Moodle',
+            'fr.openent.mediacentre.source.PMB'
+        ];
+        $scope.mediacentreQuery = '';
+        $scope.mediacentreResources = [];
+        $scope.mediacentreLoading = false;
+        $scope.mediacentreSearched = false;
+
+        $scope.openCourseMediacentrePicker = function (): void {
+            $scope.mediacentreQuery = '';
+            $scope.mediacentreResources = [];
+            $scope.mediacentreSearched = false;
+            $scope.display.courseMediacentrePicker = true;
+        };
+
+        $scope.searchMediacentre = async function (queryArg?: string): Promise<void> {
+            // queryArg = valeur du champ (scope enfant du <lightbox>) ; fallback scope parent.
+            const q: string = ((queryArg != null ? queryArg : $scope.mediacentreQuery) || '').trim();
+            if (!q) { return; }
+            $scope.mediacentreLoading = true;
+            $scope.mediacentreResources = [];
+            Utils.safeApply($scope);
+            const jsondata: string = JSON.stringify({
+                state: 'PLAIN_TEXT', event: 'search',
+                sources: MEDIACENTRE_SOURCES, data: {query: q}
+            });
+            try {
+                const {data}: any = await http.get('/mediacentre/search?jsondata=' + encodeURIComponent(jsondata));
+                const frames: any[] = Array.isArray(data) ? data : [];
+                const resources: any[] = [];
+                frames.forEach((f: any) => {
+                    const list: any[] = (f && f.data && Array.isArray(f.data.resources)) ? f.data.resources : [];
+                    list.forEach((r: any) => resources.push(r));
+                });
+                $scope.mediacentreResources = resources;
+            } catch (e) {
+                $scope.mediacentreResources = [];
+            }
+            $scope.mediacentreSearched = true;
+            $scope.mediacentreLoading = false;
+            Utils.safeApply($scope);
+        };
+
+        $scope.addCourseMediacentreResource = function (res: any): void {
+            if (!$scope.course.resources) { $scope.course.resources = []; }
+            const id: string = (res.id != null) ? String(res.id) : (res.link || res.title);
+            const already: boolean = $scope.course.resources
+                .some((r: any) => r.type === 'mediacentre' && String(r.id) === String(id));
+            if (id && !already) {
+                $scope.course.resources.push({
+                    type: 'mediacentre', id: id,
+                    name: res.title || res.link || id,
+                    url: res.link || res.url || '',
+                    image: res.image || ''
+                });
+            }
+            $scope.display.courseMediacentrePicker = false;
+            Utils.safeApply($scope);
+        };
+
+        // ============================================================================
+        // Ressources RBS (réservation de ressources) — salles/matériel, en plus du texte
+        // libre roomLabels existant (coexistence temporaire, aucune migration automatique).
+        // Relais serveur (/edt/structures/:id/rbs/resources), pas d'appel direct à l'API RBS :
+        // visible à n'importe quel enseignant même sans droit RBS individuel.
+        // ============================================================================
+        // --- Avertissement de catégorie de salle (RBS resource_type.category, texte libre) ---
+        // Association matière → catégorie attendue : PAS d'API accessible depuis EDT qui expose
+        // celle de school-planner (sp_room_category_ref/override, exposée en interne via
+        // GET /school-planner/api/room-category/{structureId}) — ce service tourne sur son propre
+        // port/process (Quarkus), pas de passerelle bus/HTTP établie vers EDT comme pour RBS
+        // (RbsBridgeService), et un appel cross-origin direct depuis ce frontend dépendrait d'une
+        // session/CORS non garantis, pour un simple avertissement non bloquant. Choix : dupliquer
+        // ici un sous-ensemble minimal, en dur, de la même heuristique que
+        // school-planner/CurriculumService.ALIASES + le seed de sp_room_category_ref
+        // (V6__room_category.sql, V7__split_labo_category.sql pour la scission physique-chimie/SVT)
+        // — approximation par sous-chaîne assumée (c'est un avertissement, pas une contrainte), à
+        // tenir manuellement à jour si le seed évolue côté school-planner.
+        const SUBJECT_ROOM_CATEGORY_ALIASES: { category: string, aliases: string[] }[] = [
+            { category: 'GYMNASE', aliases: ['sportive', 'e.p.s', 'eps', 'education physique'] },
+            { category: 'LABO_PHYSIQUE_CHIMIE', aliases: ['physique', 'chimie'] },
+            { category: 'LABO_SVT', aliases: ['vie de la terre', 'svt', 's.v.t', 'sciences de la vie'] },
+            { category: 'TECHNO', aliases: ['techno'] },
+            { category: 'MUSIQUE', aliases: ['musi'] },
+            { category: 'ARTS', aliases: ['arts plas', 'plastique'] }
+        ];
+
+        const foldText = (s: string): string => {
+            return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        };
+
+        // Cache par subjectId de la résolution serveur (relais /edt/structures/:id/room-category
+        // -> school-planner, même logique que le solveur). Rempli de façon asynchrone (fire-and-
+        // forget) par getRequiredRoomCategory() elle-même : le premier appel pour une matière
+        // renvoie encore le repli en dur, le digest suivant utilisera la vraie valeur une fois
+        // la réponse arrivée — pas de blocage, jamais d'échec bloquant si school-planner est
+        // indisponible (repli silencieux sur l'heuristique locale).
+        const serverRoomCategoryCache: { [subjectId: string]: string } = {};
+
+        const loadRequiredRoomCategoryFromServer = async (subject: any): Promise<void> => {
+            if (!$scope.structure || !$scope.structure.id || !subject || serverRoomCategoryCache[subject.subjectId] !== undefined) {
+                return;
+            }
+            try {
+                const params = 'subjectName=' + encodeURIComponent(subject.subjectLabel || '')
+                    + '&subjectCode=' + encodeURIComponent(subject.subjectCode || '');
+                const {data}: any = await http.get(`/edt/structures/${$scope.structure.id}/room-category?${params}`);
+                serverRoomCategoryCache[subject.subjectId] = (data && data.category) || null;
+                Utils.safeApply($scope);
+            } catch (e) {
+                serverRoomCategoryCache[subject.subjectId] = null;
+            }
+        };
+
+        const getRequiredRoomCategory = (subject: any): string => {
+            if (!subject) { return null; }
+            const cached: string = serverRoomCategoryCache[subject.subjectId];
+            if (cached !== undefined) {
+                if (cached) { return cached; }
+            } else {
+                loadRequiredRoomCategoryFromServer(subject);
+            }
+            const folded: string = foldText(subject.subjectLabel);
+            const match = SUBJECT_ROOM_CATEGORY_ALIASES.find((entry) =>
+                entry.aliases.some((alias: string) => folded.indexOf(alias) !== -1));
+            return match ? match.category : null;
+        };
+
+        // Comparaison tolérante au préfixe : une catégorie RBS générique ("LABO") doit être
+        // considérée compatible même si la catégorie requise est plus fine
+        // ("LABO_PHYSIQUE_CHIMIE") — un établissement peut ne pas avoir configuré ce niveau de
+        // détail dans ses types RBS.
+        const categoryMatches = (typeCategory: string, requiredCategory: string): boolean => {
+            if (!typeCategory) { return false; }
+            return typeCategory === requiredCategory
+                || requiredCategory.indexOf(typeCategory + '_') === 0
+                || typeCategory.indexOf(requiredCategory + '_') === 0;
+        };
+
+        // Message vide (pas de warning) si : matière exceptionnelle/non choisie, matière sans
+        // catégorie attendue connue, aucune salle RBS choisie, ou salle sans catégorie /
+        // catégorie GENERAL — silence total dans tous ces cas, jamais bloquant pour l'enregistrement.
+        $scope.rbsRoomCategoryWarning = (): string => {
+            if ($scope.isExceptionalSubject() || !$scope.course.subjectId) { return ''; }
+            if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return ''; }
+            const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
+            if (!subject) { return ''; }
+            const requiredCategory: string = getRequiredRoomCategory(subject);
+            if (!requiredCategory) { return ''; }
+
+            const mismatched: any[] = $scope.course.rbsResourceIds
+                .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
+                .filter((r: any) => r && r.typeCategory && r.typeCategory !== 'GENERAL' && !categoryMatches(r.typeCategory, requiredCategory));
+            if (!mismatched.length) { return ''; }
+
+            const names: string = mismatched.map((r: any) => r.name).join(', ');
+            return names + ' ' + lang.translate('edt.rbs.category.mismatch.notcategory') + ' ' + requiredCategory
+                + ' ' + lang.translate('edt.rbs.category.mismatch.expectedfor') + ' ' + subject.subjectLabel;
+        };
+
+        $scope.rbsResources = [];
+        if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
+        // Objet (et non une primitive) : le bloc contenant le <select> est sous ng-if, qui crée
+        // un scope enfant — un ng-model sur une primitive sans point s'y lierait à une propriété
+        // locale à ce scope enfant, jamais vue par addRbsResource() (défini sur le scope parent).
+        // Un objet se lit par référence à travers la chaîne de prototypes : la mutation reste
+        // visible partout.
+        $scope.rbsPicker = { selectedId: null };
+
+        // Priorise dans le sélecteur les salles de la catégorie requise pour la matière du cours,
+        // sans jamais masquer les autres (dégradation gracieuse si la détection de catégorie se
+        // trompe, ou si la structure n'a pas de salle de cette catégorie) — complète
+        // rbsRoomCategoryWarning(), qui n'avertit qu'une fois une salle déjà choisie.
+        // Valeur mémoïsée (pas une fonction appelée depuis ng-options) : ng-options réévalue son
+        // expression à chaque digest, et une fonction qui retourne un NOUVEAU tableau à chaque
+        // appel (ex. [...arr].sort(...)) casse la stabilité de référence attendue par Angular —
+        // ça a déjà causé une régression sur tout l'écran (créneaux qui ne s'ouvrent plus,
+        // navigation d'agenda qui saute de semaine).
+        $scope.sortedRbsResources = [];
+        const updateSortedRbsResources = (): void => {
+            if (!$scope.course.subjectId) { $scope.sortedRbsResources = $scope.rbsResources; return; }
+            const subject: any = $scope.mergeSubjects().find((s: any) => s.subjectId === $scope.course.subjectId);
+            const requiredCategory: string = subject ? getRequiredRoomCategory(subject) : null;
+            if (!requiredCategory) { $scope.sortedRbsResources = $scope.rbsResources; return; }
+            $scope.sortedRbsResources = [...$scope.rbsResources].sort((a: any, b: any) => {
+                const aMatch: number = categoryMatches(a.typeCategory, requiredCategory) ? 0 : 1;
+                const bMatch: number = categoryMatches(b.typeCategory, requiredCategory) ? 0 : 1;
+                return aMatch - bMatch;
+            });
+        };
+        $scope.$watch('course.subjectId', updateSortedRbsResources);
+
+        // Avertit si la salle choisie est déjà prise sur ce créneau (autre cours EDT ou
+        // réservation RBS) — exclut les réservations déjà liées à CE cours (rbsBookingIds), pour
+        // ne pas s'avertir soi-même en rééditant un cours déjà réservé. Non bloquant.
+        //
+        // Deux façons de saisir l'horaire sur ce formulaire (cf. display.freeSchedule) : soit un
+        // créneau nommé de la grille établissement (ex. "M1 : 07:00"), soit un horaire libre. Dans
+        // le premier cas — le plus courant, tout établissement avec une vraie grille horaire —
+        // seul course.timeSlot.start/end (des libellés d'heure, pas des dates) change quand
+        // l'utilisateur choisit un créneau ; courseOccurrenceForm.startTime/endTime ne bougent
+        // QUE pour l'horaire libre (cf. selectTime()). Il faut donc combiner course.startDate (la
+        // date choisie) avec l'heure effective, quel que soit le mode, comme le fait déjà
+        // selectTime() elle-même pour valider un créneau.
+        const effectiveOccurrence = (): { start: string; end: string } | null => {
+            let startHour: Date = null;
+            let endHour: Date = null;
+            if ($scope.display.freeSchedule && $scope.courseOccurrenceForm.startTime) {
+                startHour = $scope.courseOccurrenceForm.startTime;
+                endHour = $scope.courseOccurrenceForm.endTime;
+            } else if (!$scope.display.freeSchedule && $scope.course.timeSlot) {
+                if ($scope.course.timeSlot.start && $scope.course.timeSlot.start.startHour) {
+                    startHour = DateUtils.getTimeFormatDate($scope.course.timeSlot.start.startHour);
+                }
+                if ($scope.course.timeSlot.end && $scope.course.timeSlot.end.endHour) {
+                    endHour = DateUtils.getTimeFormatDate($scope.course.timeSlot.end.endHour);
+                }
+            }
+            if (!$scope.course.startDate || !startHour || !endHour) { return null; }
+            return {
+                start: DateUtils.getDateTimeFormat($scope.course.startDate, startHour),
+                end: DateUtils.getDateTimeFormat($scope.course.startDate, endHour),
+            };
+        };
+
+        $scope.rbsRoomConflictWarning = '';
+        const checkRoomAvailability = async (): Promise<void> => {
+            $scope.rbsRoomConflictWarning = '';
+            if (!$scope.structure || !$scope.structure.id) { return; }
+            if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return; }
+            const occurrence = effectiveOccurrence();
+            if (!occurrence) { return; }
+
+            const rooms: any[] = $scope.course.rbsResourceIds
+                .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
+                .filter((r: any) => !!r);
+            if (!rooms.length) { return; }
+
+            const ownBookingIds: number[] = ($scope.course.rbsBookingIds || []) as number[];
+            const start: string = moment(occurrence.start).format('YYYY-MM-DDTHH:mm:ss');
+            const end: string = moment(occurrence.end).format('YYYY-MM-DDTHH:mm:ss');
+            const conflictingRooms: string[] = [];
+            for (const room of rooms) {
+                let conflict: boolean = false;
+                try {
+                    // Paramètre encodé à la main : le pont http d'entcore-toolkit ne garantit pas
+                    // l'option `params` d'axios. Ex. « Salle 201 » → ?room=Salle%20201.
+                    const {data}: any = await http.get(
+                        `/edt/structures/${$scope.structure.id}/room-conflicts/${start}/${end}`
+                        + `?room=${encodeURIComponent(room.name)}`
+                    );
+                    conflict = conflict || (data || []).some((c: any) => c._id !== $scope.course._id);
+                } catch (e) {
+                    // Avertissement non bloquant : silence total en cas d'échec de l'appel.
+                }
+                try {
+                    const {data}: any = await http.get(
+                        `/rbs/resource/${room.id}/booking-conflicts/${start}/${end}`);
+                    conflict = conflict || (data || []).some((b: any) => ownBookingIds.indexOf(b.id) === -1);
+                } catch (e) {
+                    // Avertissement non bloquant : silence total en cas d'échec de l'appel.
+                }
+                if (conflict) { conflictingRooms.push(room.name); }
+            }
+            if (conflictingRooms.length) {
+                $scope.rbsRoomConflictWarning = conflictingRooms.join(', ') + ' '
+                    + lang.translate('edt.rbs.room.conflict.detected');
+            }
+            Utils.safeApply($scope);
+        };
+        $scope.$watchGroup(
+            [
+                'course.rbsResourceIds.length',
+                'course.startDate',
+                'course.timeSlot.start.startHour',
+                'course.timeSlot.end.endHour',
+                'courseOccurrenceForm.startTime',
+                'courseOccurrenceForm.endTime',
+            ],
+            checkRoomAvailability
+        );
+
+        $scope.loadRbsResources = async function (): Promise<void> {
+            $scope.rbsResources = [];
+            if (!$scope.structure || !$scope.structure.id) { return; }
+            try {
+                const {data}: any = await http.get(`/edt/structures/${$scope.structure.id}/rbs/resources`);
+                const types: any[] = (data && data.types) || [];
+                const resources: any[] = (data && data.resources) || [];
+                const typeNameById: any = {};
+                const typeCategoryById: any = {};
+                types.forEach((t: any) => {
+                    typeNameById[t.id] = t.name;
+                    // t.category = colonne rbs.resource_type.category (texte libre), déjà remontée
+                    // ici via le relais serveur (RbsBridgeService -> "SELECT t.*"), pas besoin d'un
+                    // second appel dédié.
+                    typeCategoryById[t.id] = (t.category || '').toUpperCase().trim();
+                });
+                $scope.rbsResources = resources.map((r: any) => ({
+                    id: r.id,
+                    name: r.name,
+                    typeName: typeNameById[r.type_id] || '',
+                    typeCategory: typeCategoryById[r.type_id] || ''
+                }));
+            } catch (e) {
+                $scope.rbsResources = [];
+            }
+            // Pré-sélectionne par corrélation de nom exact avec roomLabels si le cours n'a jamais
+            // été explicitement lié à une ressource RBS (ex. cours généré par school-planner,
+            // source="school-planner" : la salle y est un simple label texte, sans rbsResourceIds)
+            // — même patron de corrélation que room-conflicts côté serveur. Purement indicatif :
+            // ne modifie rien en base tant que l'utilisateur n'enregistre pas le formulaire.
+            if ((!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length)
+                    && $scope.course.roomLabels && $scope.course.roomLabels.length) {
+                const roomLabel: string = ($scope.course.roomLabels[0] || '').trim().toLowerCase();
+                const matched: any = roomLabel && $scope.rbsResources.find((r: any) => r.name.trim().toLowerCase() === roomLabel);
+                if (matched) {
+                    $scope.course.rbsResourceIds = [matched.id];
+                }
+            }
+            updateSortedRbsResources();
+            Utils.safeApply($scope);
+        };
+        $scope.loadRbsResources();
+
+        $scope.rbsResourceLabel = function (id: number): string {
+            const found: any = $scope.rbsResources.find((r: any) => r.id === id);
+            if (!found) { return String(id); }
+            return found.typeName ? `${found.name} (${found.typeName})` : found.name;
+        };
+
+        $scope.addRbsResource = function (): void {
+            const id: number = $scope.rbsPicker.selectedId;
+            if (id === null || id === undefined) { return; }
+            if (!$scope.course.rbsResourceIds) { $scope.course.rbsResourceIds = []; }
+            if ($scope.course.rbsResourceIds.indexOf(id) === -1) {
+                $scope.course.rbsResourceIds.push(id);
+            }
+            $scope.rbsPicker.selectedId = null;
+        };
+
+        $scope.removeRbsResource = function (id: number): void {
+            if (!$scope.course.rbsResourceIds) { return; }
+            $scope.course.rbsResourceIds = $scope.course.rbsResourceIds.filter((rid: number) => rid !== id);
+        };
 
         $scope.setTimeSlot = (): void => {
             $scope.display.checkbox = true;
@@ -63,6 +470,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             window.structure = structure;
             $scope.structure.id = structure.id;
             await $scope.syncStructure(structure);
+            await $scope.loadRbsResources();
             $scope.setTimeSlot();
         };
 
@@ -404,7 +812,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
          */
         $scope.cancelCreation = () => {
             delete $scope.course;
-            $scope.goTo('/');
+            goToCalendarPreservingWeek();
 
         };
 
@@ -423,7 +831,37 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
          * @param {Course} course course to save
          * @returns {Promise<void>} Returns a promise
          */
+        // Avertit l'enseignant quand une ressource RBS demandée n'a pas pu être réservée (créneau
+        // déjà pris) — jusqu'ici cet échec restait entièrement silencieux (fire-and-forget côté
+        // serveur, seulement loggé). Le cours lui-même est toujours enregistré normalement.
+        const notifyRbsConflicts = (result: any): void => {
+            if (!result || !result.rbsConflicts || !result.rbsConflicts.length) return;
+            const resourceIds: number[] = _.uniq(
+                result.rbsConflicts.reduce((acc: number[], c: any) => acc.concat(c.conflictResourceIds || []), [])
+            );
+            const names = resourceIds.map((rid: number) => $scope.rbsResourceLabel(rid)).join(', ');
+            notify.error(lang.translate('edt.notify.rbs.conflict') + names);
+        };
+
+        // Empêche le double-clic pendant l'enregistrement : le bouton n'était désactivé que par
+        // isValidForm() (statique), pas par l'état "en cours d'enregistrement" — chaque clic
+        // pendant l'attente de la réponse serveur relançait saveCourse() et créait un nouveau
+        // cours en double (silencieusement, puisque rien à l'écran n'indiquait qu'un enregistrement
+        // était déjà en cours).
+        $scope.saving = false;
+
         $scope.saveCourse = async (course: Course): Promise<void> => {
+            if ($scope.saving) return;
+            $scope.saving = true;
+
+            try {
+                await $scope.doSaveCourse(course);
+            } finally {
+                $scope.saving = false;
+            }
+        };
+
+        $scope.doSaveCourse = async (course: Course): Promise<void> => {
 
             if (course.courseOccurrences && course.courseOccurrences.length === 0) {
                 $scope.submit_CourseOccurrence_Form();
@@ -449,20 +887,22 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
                 course.syncCourseWithOccurrence($scope.courseOccurrenceForm);
                 delete course.recurrence;
                 setDatesFromTimeslots(course);
-                await course.update();
+                notifyRbsConflicts(await course.update());
             } else if ($scope.isUpdateRecurrence()) {
                 course.syncCourseWithOccurrence($scope.courseOccurrenceForm);
                 course.newRecurrence = Utils.uuid();
-                await course.update();
+                notifyRbsConflicts(await course.update());
             } else if (course.is_recurrent) {
+                // Cas récurrent (plusieurs occurrences envoyées ensemble via Courses.save()) :
+                // rbsConflicts pas encore remonté pour ce chemin, seulement pour un cours simple.
                 let courses = course.getCourseForEachOccurrence();
                 await courses.save();
             } else {
                 setDatesFromTimeslots(course);
-                await course.save();
+                notifyRbsConflicts(await course.save());
             }
             delete $scope.course;
-            $scope.goTo('/');
+            goToCalendarPreservingWeek();
         };
 
         const setDatesFromTimeslots = (course: Course): void => {
@@ -575,7 +1015,7 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
         $scope.dropCourse = async (course: Course) => {
             $scope.editOccurrence || !course.is_recurrent ? await course.delete(course._id) : await course.delete(null, course.recurrence);
             delete $scope.course;
-            $scope.goTo('/');
+            goToCalendarPreservingWeek();
             await $scope.syncCourses();
         };
 

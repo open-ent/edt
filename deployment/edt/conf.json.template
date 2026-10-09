@@ -4,6 +4,7 @@
         "main" : "fr.cgi.edt.Edt",
         "port" : 8168,
         "app-name" : "Edt",
+        "frontend-ui" : "angular",
     	"app-address" : "/edt",
     	"app-icon" : "Edt-large",
         "host": "${host}",

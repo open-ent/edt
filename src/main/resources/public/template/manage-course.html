@@ -212,8 +212,38 @@
                     <i18n>edt.utils.room</i18n>
                 </label>
                 <div class="cell twelve-mobile ten"><input type="text" class="text-center remove-padding width-7"
-                                                           maxlength="50"
+                                                           maxlength="50" readonly
+                                                           title="[[translate('edt.utils.room.readonly')]]"
                                                            ng-model="courseOccurrenceForm.roomLabels[0]"/>
+                </div>
+            </div>
+
+            <!--RBS RESOURCE PICKER — coexiste avec la saisie libre ci-dessus, ne la remplace pas-->
+            <div ng-if="rbsResources.length > 0" class="row form-row remove-padding-bottom">
+                <label for="select-rbs-resource" class="cell two twelve-mobile">
+                    <i18n>edt.utils.rbs.resource</i18n>
+                </label>
+                <div class="cell twelve-mobile ten">
+                    <select id="select-rbs-resource" ng-model="rbsPicker.selectedId"
+                            ng-change="addRbsResource()"
+                            ng-options="r.id as (r.typeName ? r.name + ' (' + r.typeName + ')' : r.name) for r in sortedRbsResources">
+                        <option value="" selected><i18n>edt.utils.rbs.resource.choose</i18n></option>
+                    </select>
+                    <div class="select-blocks remove-margin-bottom">
+                        <div ng-repeat="rid in course.rbsResourceIds track by rid"
+                             ng-click="removeRbsResource(rid)">[[rbsResourceLabel(rid)]]
+                        </div>
+                    </div>
+                    <!--Avertissement non bloquant : catégorie de la salle choisie ne correspond pas
+                        à la catégorie attendue pour la matière. N'empêche jamais l'enregistrement.-->
+                    <div class="warning" ng-if="rbsRoomCategoryWarning()">
+                        [[rbsRoomCategoryWarning()]]
+                    </div>
+                    <!--Avertissement non bloquant : la salle choisie est déjà occupée par un
+                        autre cours sur ce créneau. N'empêche jamais l'enregistrement.-->
+                    <div class="warning" ng-if="rbsRoomConflictWarning">
+                        [[rbsRoomConflictWarning]]
+                    </div>
                 </div>
             </div>
 
@@ -336,6 +366,7 @@
                                     </select>
                                 </td>
                                 <td><input type="text" ng-model="courseOccurrenceForm.roomLabels[0]" maxlength="50"
+                                           readonly title="[[translate('edt.utils.room.readonly')]]"
                                            class="text-center remove-padding width-7"/></td>
                                 <td ng-if="!isUpdateRecurrence()">
                                     <button ng-disabled="!courseOccurrenceForm.isValidTime(course, display) || !courseOccurrenceForm.isNotPastTime()"
@@ -357,6 +388,74 @@
             </div>
         </article>
 
+        <!-- Documents attachés au cours (espace documentaire + médiacentre) -->
+        <div class="row edt-resources" style="margin: 12px 0;">
+            <label class="block"><i18n>edt.resources.label</i18n></label>
+            <ul ng-if="course.resources.length" style="list-style:none; padding:0; margin:6px 0;">
+                <li ng-repeat="res in course.resources track by $index"
+                    style="display:flex; align-items:center; gap:8px; padding:4px 0;">
+                    <img ng-if="res.image" ng-src="[[res.image]]" width="24" style="border-radius:2px;"/>
+                    <a ng-href="[[res.url]]" target="_blank" ng-if="res.url">[[res.name]]</a>
+                    <span ng-if="!res.url">[[res.name]]</span>
+                    <i class="close" style="cursor:pointer;" ng-click="removeCourseResource($index)"></i>
+                </li>
+            </ul>
+            <button type="button" ng-click="openCourseResourcePicker()">
+                <i18n>edt.resources.add.workspace</i18n>
+            </button>
+            <button type="button" ng-click="openCourseMediacentrePicker()">
+                <i18n>edt.resources.add.mediacentre</i18n>
+            </button>
+        </div>
+
+        <!-- Picker : documents de l'espace documentaire -->
+        <lightbox show="display.courseResourcePicker" on-close="display.courseResourcePicker = false">
+            <h2><i18n>edt.resources.add.workspace</i18n></h2>
+            <p class="info"><i18n>edt.resources.picker.hint</i18n></p>
+            <media-library ng-if="display.courseResourcePicker"
+                           visibility="'protected'" multiple="true"
+                           ng-model="documents" file-format="'any'"
+                           ng-change="addCourseWorkspaceResources()"></media-library>
+            <div class="row">
+                <button type="button" class="cancel right-magnet" ng-click="display.courseResourcePicker = false">
+                    <i18n>edt.utils.cancel</i18n>
+                </button>
+            </div>
+        </lightbox>
+
+        <!-- Picker : ressources du médiacentre (recherche) -->
+        <lightbox show="display.courseMediacentrePicker" on-close="display.courseMediacentrePicker = false">
+            <h2><i18n>edt.resources.add.mediacentre</i18n></h2>
+            <div class="row">
+                <input type="text" class="eight" ng-model="mediacentreQuery"
+                       ng-keydown="$event.keyCode === 13 && searchMediacentre(mediacentreQuery)"
+                       i18n-placeholder="edt.resources.mediacentre.search.placeholder"/>
+                <button type="button" ng-click="searchMediacentre(mediacentreQuery)">
+                    <i18n>edt.resources.mediacentre.search</i18n>
+                </button>
+            </div>
+            <p ng-if="mediacentreLoading"><i18n>edt.resources.mediacentre.loading</i18n></p>
+            <p ng-if="!mediacentreLoading && !mediacentreSearched && mediacentreResources.length === 0" class="info">
+                <i18n>edt.resources.mediacentre.empty</i18n>
+            </p>
+            <p ng-if="!mediacentreLoading && mediacentreSearched && mediacentreResources.length === 0" class="info">
+                <i18n>edt.resources.mediacentre.noresult</i18n>
+            </p>
+            <ul class="mediacentre-results" style="list-style:none; padding:0;">
+                <li ng-repeat="res in mediacentreResources" class="pointer"
+                    style="display:flex; align-items:center; gap:8px; padding:6px 0; cursor:pointer;"
+                    ng-click="addCourseMediacentreResource(res)">
+                    <img ng-if="res.image" ng-src="[[res.image]]" width="40" style="border-radius:2px;"/>
+                    <span>[[res.title]]</span>
+                </li>
+            </ul>
+            <div class="row">
+                <button type="button" class="cancel right-magnet" ng-click="display.courseMediacentrePicker = false">
+                    <i18n>edt.utils.cancel</i18n>
+                </button>
+            </div>
+        </lightbox>
+
         <!--SUBMIT/CANCEL BUTTONS-->
         <div class="right-magnet">
 
@@ -370,7 +469,7 @@
                 <i18n>edt.utils.delete</i18n>
             </button>
 
-            <button ng-show="course.canIManageCourse(courseOccurrenceForm.startTime) || !isAnUpdate" ng-disabled="!isValidForm()" type="submit"
+            <button ng-show="course.canIManageCourse(courseOccurrenceForm.startTime) || !isAnUpdate" ng-disabled="!isValidForm() || saving" type="submit"
                     ng-click="saveCourse(course)">
                 <i18n ng-if="isAnUpdate">edt.utils.modify</i18n>
                 <i18n ng-if="!isAnUpdate">edt.utils.create</i18n>

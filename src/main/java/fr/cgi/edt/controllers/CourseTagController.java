@@ -76,7 +76,13 @@ public class CourseTagController extends ControllerHelper {
 
         RequestUtils.bodyToJson(request, body -> courseTagService.updateCourseTagHidden(structureId,
                         courseTagId, body.getBoolean(Field.ISHIDDEN, false))
-                .onSuccess(result -> renderJson(request, result))
+                .onSuccess(result -> {
+                    if (result != null && result.containsKey(Field.ID)) {
+                        renderJson(request, result);
+                    } else {
+                        notFound(request, "course.tag.not.found.in.structure");
+                    }
+                })
                 .onFailure(err -> badRequest(request)));
     }
 }
