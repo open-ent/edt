@@ -60,6 +60,13 @@ public interface EdtService {
 
     void retrieveRecurrences(String recurrence, Handler<Either<String, JsonArray>> handler);
 
+    /**
+     * Récupère le document complet d'un cours par son _id (doc Mongo brut, non tronqué par le
+     * worker de génération d'occurrences). Utilisé notamment pour recharger les champs absents de
+     * la grille (ex : resources / documents attachés) à l'ouverture du formulaire d'édition.
+     */
+    void getCourse(String id, Handler<Either<String, JsonObject>> handler);
+
     Future<JsonObject> retrieveRecurrencesDates(String recurrence);
 
     /**

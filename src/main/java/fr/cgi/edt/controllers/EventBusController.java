@@ -93,6 +93,26 @@ public class EventBusController extends ControllerHelper {
                                         .put(Field.STATUS, Field.OK)
                                         .put(Field.RESULT, v)));
                 break;
+            case "get-courses":
+                // Appel interne de module à module (RBS, génération de réservations depuis
+                // l'EDT publié — scénario BFC 1.3, "traiter les besoins récurrents avant la
+                // rentrée") : pas de session utilisateur réelle, user=null (getCourses() gère ce
+                // cas — filtre juste par priorité de tag, pas de droit enseignant/personnel).
+                structureId = body.getString(Field.STRUCTUREID);
+                String getCoursesStartAt = body.getString(Field.STARTDATE);
+                String getCoursesEndAt = body.getString(Field.ENDDATE);
+                JsonArray groupIds = body.getJsonArray("groupIds", new JsonArray());
+                this.courseService.getCourses(structureId, getCoursesStartAt, getCoursesEndAt,
+                                new JsonArray(), groupIds, new JsonArray(), new JsonArray(),
+                                null, null, false, false, null)
+                        .onFailure(e -> message.reply(new JsonObject()
+                                .put(Field.STATUS, Field.ERROR)
+                                .put(Field.MESSAGE, e.getMessage())))
+                        .onSuccess(v -> message.reply(
+                                new JsonObject()
+                                        .put(Field.STATUS, Field.OK)
+                                        .put(Field.RESULT, v)));
+                break;
             case "delete-courses-subject":
                 structureId = body.getString(Field.STRUCTUREID);
                 subjectId = body.getString(Field.SUBJECTID);

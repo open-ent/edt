@@ -42,6 +42,7 @@ public class Field {
     public static final String RECORDS = "records";
     public static final String POPULATION = "population";
     public static final String HOLIDAYS = "holidays";
+    public static final String SCHOOL_PLANNER_URL = "school-planner-url";
     public static final String STATUS = "status";
     public static final String ERROR = "error";
     public static final String MESSAGE = "message";
@@ -94,6 +95,13 @@ public class Field {
     public static final String COURSEIDS = "courseIds";
     public static final String SPACE = " ";
     public static final String URL_SPACE = "%20";
+
+    // RBS bridge
+    public static final String RBS_RESOURCE_IDS = "rbsResourceIds";
+    // Ids des réservations RBS effectivement créées pour rbsResourceIds — capturés depuis la
+    // réponse de "save-bookings" (RbsBridgeService), nécessaires pour pouvoir les supprimer
+    // plus tard ("delete-bookings" prend des ids de réservation, pas de ressource).
+    public static final String RBS_BOOKING_IDS = "rbsBookingIds";
 
     private Field() {
         throw new IllegalStateException("Utility class");

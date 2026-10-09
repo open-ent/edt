@@ -11,6 +11,6 @@ import org.entcore.common.user.UserInfos;
 public class ManageSearchWorkflowAction implements ResourcesProvider {
     @Override
     public void authorize(HttpServerRequest resourceRequest, Binding binding, UserInfos user, Handler<Boolean> handler) {
-        handler.handle(new WorkflowActionUtils().hasRight(user, EdtWorkflowActions.SEARCH.toString()));
+        handler.handle(user.isADMC() || new WorkflowActionUtils().hasRight(user, EdtWorkflowActions.SEARCH.toString()));
     }
 }
