@@ -301,5 +301,6 @@
   "edt.timetable.nav.goto": "Go to date",
   "edt.timetable.period.range": "from [[0]] to [[1]]",
   "edt.timetable.quarters": "Quarter hours",
-  "edt.timetable.courses.empty": "No course in this period."
+  "edt.timetable.courses.empty": "No course in this period.",
+  "edt.timetable.all.structures.hint": "“All my schools” shows your own timetable in each of your schools."
 }

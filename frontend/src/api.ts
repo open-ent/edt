@@ -212,6 +212,25 @@ export const childClasses = (child: Child): Group[] =>
     return { id, name, externalId, type_groupe: 0, isInCurrentTeacher: false };
   });
 
+// ── Recherche (barre de recherche de l'IHM AngularJS, autocompleteUtils.ts) ─────
+/** Enseignants dont le prénom ou le nom contient le texte, ex. « hafs » → HAFSA001 Marie-Line (classes 501, 502…). */
+export const searchTeachers = async (
+  structureId: string,
+  text: string,
+): Promise<Array<{ id: string; displayName: string; classesNames?: string[] }>> =>
+  (await json<Array<{ id: string; displayName: string; classesNames?: string[] }>>(
+    await fetch(
+      `/edt/search/users?structureId=${structureId}&profile=Teacher&q=${encodeURIComponent(text.replace(/\s/g, '').toLowerCase())}&field=firstName&field=lastName`,
+      base,
+    ),
+  )) ?? [];
+
+/** Classes et groupes dont le nom contient le texte, ex. « 40 » → 401, 402. */
+export const searchGroups = async (structureId: string, text: string): Promise<Array<{ id: string; displayName: string }>> =>
+  (await json<Array<{ id: string; displayName: string }>>(
+    await fetch(`/edt/search?structureId=${structureId}&q=${encodeURIComponent(text)}`, base),
+  )) ?? [];
+
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
 /** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
 export const getStructurePreference = async (): Promise<{ id?: string; name?: string }> => {
@@ -374,6 +393,8 @@ export const api = {
   getCourses,
   getRbsResources,
   getChildren,
+  searchTeachers,
+  searchGroups,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,

@@ -301,5 +301,6 @@
   "edt.timetable.nav.goto": "Aller à la date",
   "edt.timetable.period.range": "du [[0]] au [[1]]",
   "edt.timetable.quarters": "Quarts d'heure",
-  "edt.timetable.courses.empty": "Aucun cours sur cette période."
+  "edt.timetable.courses.empty": "Aucun cours sur cette période.",
+  "edt.timetable.all.structures.hint": "« Tous mes établissements » affiche votre propre emploi du temps dans chacun de vos établissements."
 }

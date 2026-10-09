@@ -52,9 +52,16 @@ export function userStructures(ids: string[] | undefined, names: string[] | unde
 }
 
 /**
+ * Choix « Tous mes établissements » (identifiant mémorisé par l'IHM AngularJS, clé i18n
+ * all.structures.id) : les propres cours de l'usager dans chacun de ses établissements.
+ */
+export const ALL_STRUCTURES = 'all_Structures';
+
+/**
  * Établissement affiché à l'ouverture, comme l'Angular (`getStructure` + `Structures.first`) :
  * le dernier choisi (préférence `edt.structure`) s'il fait toujours partie des établissements de
- * l'usager, sinon l'établissement principal, sinon le premier.
+ * l'usager (ou « Tous mes établissements » s'il en a plusieurs), sinon l'établissement principal,
+ * sinon le premier.
  * Ex. préférence « Lycée B » retirée du compte → établissement principal « Collège A ».
  */
 export function initialStructureId(
@@ -63,6 +70,7 @@ export function initialStructureId(
   mainStructureId: string | undefined,
 ): string {
   const ids = structures.map((s) => s.id);
+  if (preferredId === ALL_STRUCTURES && ids.length > 1) return ALL_STRUCTURES;
   if (preferredId && ids.includes(preferredId)) return preferredId;
   if (mainStructureId && ids.includes(mainStructureId)) return mainStructureId;
   return ids[0] ?? '';

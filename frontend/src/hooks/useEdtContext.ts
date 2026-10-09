@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../api';
-import { initialStructureId, Profile, profileOf, StructureRef, userStructures, WORKFLOW } from '../context';
+import { ALL_STRUCTURES, initialStructureId, Profile, profileOf, StructureRef, userStructures, WORKFLOW } from '../context';
 
 export interface EdtContext {
   /** Session chargée et établissement initial résolu. */
@@ -13,8 +13,11 @@ export interface EdtContext {
   canManage: boolean;
   canSearch: boolean;
   structures: StructureRef[];
+  /** Établissement courant ; absent en mode « Tous mes établissements ». */
   structure: StructureRef | undefined;
-  /** Change d'établissement et le mémorise, ex. passage de « Collège A » à « Lycée B ». */
+  /** Mode « Tous mes établissements » : propres cours de l'usager dans chacun de ses établissements. */
+  allStructures: boolean;
+  /** Change d'établissement (ou ALL_STRUCTURES) et le mémorise, ex. « Collège A » → « Lycée B ». */
   selectStructure: (id: string) => void;
 }
 
@@ -45,6 +48,11 @@ export function useEdtContext(): EdtContext {
   const structure = structures.find((s) => s.id === structureId);
 
   const selectStructure = (id: string) => {
+    if (id === ALL_STRUCTURES && structures.length > 1) {
+      setStructureId(id);
+      savePreference.mutate({ id, name: 'Tous mes établissements' });
+      return;
+    }
     const next = structures.find((s) => s.id === id);
     if (!next) return;
     setStructureId(id);
@@ -59,6 +67,7 @@ export function useEdtContext(): EdtContext {
     canSearch,
     structures,
     structure,
+    allStructures: structureId === ALL_STRUCTURES,
     selectStructure,
   };
 }

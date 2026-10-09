@@ -1,15 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
 import { api, childClasses, Course, Group } from '../api';
-import { composesOwnFilter, sortGroups } from '../context';
+import { ALL_STRUCTURES, composesOwnFilter, sortGroups } from '../context';
 import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
+import { SearchBox } from '../features/SearchBox';
 import { WeekGrid } from '../features/WeekGrid';
 import { courseSubject } from '../grid';
-import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection } from '../filter';
+import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection, toggleGroup } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { initialAnchor, periodOf, step, ViewMode, VIEW_MODES } from '../period';
 import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
@@ -37,6 +38,8 @@ export function Timetable() {
   const [childId, setChildId] = useState('');
   const child = children.find((c) => c.id === childId) ?? children[0];
   const structureId = isRelative ? child?.structures?.[0]?.id ?? '' : ctx.structure?.id ?? '';
+  // « Tous mes établissements » : créneaux et noms d'enseignants pris dans le premier établissement.
+  const referenceStructureId = ctx.allStructures ? ctx.structures[0]?.id ?? '' : structureId;
 
   // Lien profond depuis le dashboard (widget "prochain cours") : #/?date=YYYY-MM-DD&start=HH:MM
   // ouvre directement la bonne semaine et met en évidence le créneau visé.
@@ -64,13 +67,17 @@ export function Timetable() {
     enabled: !!structureId && !isRelative,
   });
   const matieresQuery = useQuery({ queryKey: ['edt', 'matieres', structureId], queryFn: () => api.getMatieres(structureId), enabled: !!structureId });
-  const slotsQuery = useQuery({ queryKey: ['edt', 'timeslots', structureId], queryFn: () => api.getTimeSlots(structureId), enabled: !!structureId });
+  const slotsQuery = useQuery({
+    queryKey: ['edt', 'timeslots', referenceStructureId],
+    queryFn: () => api.getTimeSlots(referenceStructureId),
+    enabled: !!referenceStructureId,
+  });
 
   const teacherId = ctx.userId;
   const teachersQuery = useQuery({
-    queryKey: ['edt', 'teachers', structureId],
-    queryFn: () => api.getTeachers(structureId),
-    enabled: !!structureId,
+    queryKey: ['edt', 'teachers', referenceStructureId],
+    queryFn: () => api.getTeachers(referenceStructureId),
+    enabled: !!referenceStructureId,
   });
 
   // Comme l'Angular : un enseignant voit d'emblée son propre emploi du temps, le personnel part
@@ -144,6 +151,7 @@ export function Timetable() {
   const startAt = ymd(period.first);
   const endAt = ymd(period.last);
   const hasSelection = shownGroupIds.length > 0 || activeSelection.teacherIds.length > 0;
+  const showFilter = composesOwnFilter(ctx.profile) && !ctx.allStructures;
   const filter = useMemo(
     () => coursesFilter(shownGroupIds, activeSelection.teacherIds, classes, subGroups),
     [shownGroupIds, activeSelection.teacherIds, classes, subGroups],
@@ -158,8 +166,18 @@ export function Timetable() {
     enabled: !!structureId && hasSelection && !subGroupsPending,
     placeholderData: (previous) => previous,
   });
+  // « Tous mes établissements » (AngularJS calendarItems.sync, isAllStructure) : les cours de
+  // l'usager lus dans chacun de ses établissements, puis réunis.
+  const allStructuresQueries = useQueries({
+    queries: (ctx.allStructures && activeSelection.teacherIds.length > 0 ? ctx.structures : []).map((st) => ({
+      queryKey: ['edt', 'courses', st.id, filter, startAt, endAt],
+      queryFn: () => api.getCourses(st.id, filter, startAt, endAt),
+    })),
+  });
+  const rawCourses = ctx.allStructures ? allStructuresQueries.flatMap((q) => q.data ?? []) : coursesQuery.data ?? [];
+  const coursesLoading = ctx.allStructures ? allStructuresQueries.some((q) => q.isLoading) : coursesQuery.isLoading;
 
-  const courses = [...(coursesQuery.data ?? [])].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
+  const courses = [...rawCourses].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
   // Libellés des ressources RBS, chargés seulement si un cours affiché en porte (cf. AngularJS
   // calendarItems.resolveRbsResourceLabels) — inutile pour un établissement sans RBS.
   const hasRbs = courses.some((c) => (c.rbsResourceIds ?? []).length > 0);
@@ -256,7 +274,7 @@ export function Timetable() {
       )}
 
       <div className="d-flex gap-16 align-items-start">
-        {composesOwnFilter(ctx.profile) && (
+        {showFilter && (
         <FilterSidebar
           groups={classes}
           subGroups={subGroups}
@@ -285,12 +303,37 @@ export function Timetable() {
             <select
               id="edt-structure"
               className="form-select"
-              value={structureId}
+              value={ctx.allStructures ? ALL_STRUCTURES : structureId}
               onChange={(e) => ctx.selectStructure(e.target.value)}
             >
               {ctx.structures.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <option value={ALL_STRUCTURES}>{t('all.structures.label')}</option>
             </select>
           </div>
+        )}
+        {showFilter && ctx.canSearch && (
+          <>
+            <SearchBox
+              label={t('edt.search.teacher')}
+              queryKey={['edt', 'search-teachers', structureId]}
+              search={async (text) =>
+                (await api.searchTeachers(structureId, text)).map((x) => ({
+                  id: x.id,
+                  label: x.displayName,
+                  hint: (x.classesNames ?? []).join(', '),
+                }))
+              }
+              onSelect={(o) =>
+                setSelection((sel) => (sel.teacherIds.includes(o.id) ? sel : { ...sel, teacherIds: [...sel.teacherIds, o.id] }))
+              }
+            />
+            <SearchBox
+              label={t('edt.search.group')}
+              queryKey={['edt', 'search-groups', structureId]}
+              search={async (text) => (await api.searchGroups(structureId, text)).map((x) => ({ id: x.id, label: x.displayName }))}
+              onSelect={(o) => setSelection((sel) => toggleGroup(sel, o.id, subGroups))}
+            />
+          </>
         )}
         {isTeacher && teacherId && !selection.teacherIds.includes(teacherId) && (
           <button
@@ -357,12 +400,12 @@ export function Timetable() {
       </div>
 
       {!hasSelection && (
-        <p className="text-muted">{t('edt.timetable.select.prompt')}</p>
+        <p className="text-muted">{t(ctx.allStructures ? 'edt.timetable.all.structures.hint' : 'edt.timetable.select.prompt')}</p>
       )}
 
-      {hasSelection && coursesQuery.isLoading && <p>{t('edt.loading', { defaultValue: 'Chargement…' })}</p>}
+      {hasSelection && coursesLoading && <p>{t('edt.loading', { defaultValue: 'Chargement…' })}</p>}
 
-      {hasSelection && !coursesQuery.isLoading && courses.length === 0 && view === 'list' && (
+      {hasSelection && !coursesLoading && courses.length === 0 && view === 'list' && (
         <p className="text-muted">{t('edt.timetable.courses.empty')}</p>
       )}
 
@@ -391,7 +434,7 @@ export function Timetable() {
             highlighted={highlightCourse}
             highlightRef={(el) => { highlightRef.current = el; }}
           />
-          {!coursesQuery.isLoading && courses.length === 0 && (
+          {!coursesLoading && courses.length === 0 && (
             <p className="text-muted mt-8">{t('edt.courses.empty.grid')}</p>
           )}
         </>

@@ -49,8 +49,9 @@ describe('initialStructureId', () => {
     expect(initialStructureId(structures, 'Z', 'C')).toBe('C');
   });
 
-  it('ignore la préférence « tous les établissements » de l’IHM AngularJS', () => {
-    expect(initialStructureId(structures, 'all_Structures', undefined)).toBe('A');
+  it('reprend « tous les établissements » quand l’usager en a plusieurs, sinon le seul', () => {
+    expect(initialStructureId(structures, 'all_Structures', undefined)).toBe('all_Structures');
+    expect(initialStructureId(userStructures(['A'], ['Collège A']), 'all_Structures', undefined)).toBe('A');
   });
 
   it('prend le premier établissement à défaut', () => {
