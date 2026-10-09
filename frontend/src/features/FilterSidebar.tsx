@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import type { Group, Teacher } from '../api';
-import { groupColor } from '../colors';
+import { groupColor, textOn } from '../colors';
 import { deselectAll, effectiveGroupIds, selectAll, Selection, SubGroups, toggleGroup, toggleTeacher } from '../filter';
 
 interface Props {
@@ -31,7 +31,7 @@ const pill = (active: boolean, color: string) => ({
   marginBottom: 4,
   fontSize: 13,
   fontWeight: 600,
-  color: '#fff',
+  color: active ? textOn(color) : '#fff',
   background: active ? color : 'rgba(160, 167, 179, 1)',
   cursor: 'pointer',
 });
@@ -104,6 +104,7 @@ export function FilterSidebar({ groups, subGroups, teachers, selection, onChange
             style={pill(shown.has(g.id), groupColor(g.color))}
             onClick={() => onChange(toggleGroup(selection, g.id, subGroups))}
           >
+            {shown.has(g.id) && <span aria-hidden>✓ </span>}
             {g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name}
           </button>
         ))}
@@ -120,6 +121,7 @@ export function FilterSidebar({ groups, subGroups, teachers, selection, onChange
               style={pill(shown.has(g.id), SUBGROUP_COLOR)}
               onClick={() => onChange(toggleGroup(selection, g.id, subGroups))}
             >
+              {shown.has(g.id) && <span aria-hidden>✓ </span>}
               {g.name}
             </button>
           ))}

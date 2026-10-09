@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Course, TimeSlot } from '../api';
-import { groupColor } from '../colors';
+import { groupColor, textOn } from '../colors';
 import { axisBounds, courseSubject, dayOf, isPast, minutesOf, minutesOfHour, placeDay } from '../grid';
 import { addDays, ymd } from '../utils';
 
@@ -52,7 +52,7 @@ export function WeekGrid({ monday, courses, slots, teacherName, rbsName, subject
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '72px repeat(7, minmax(110px, 1fr))', minWidth: 840 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '64px repeat(7, minmax(84px, 1fr))', minWidth: 652 }}>
         <div />
         {days.map((d) => (
           <div key={ymd(d)} className="text-center fw-bold pb-8" style={{ textTransform: 'capitalize', fontSize: 13 }}>
@@ -114,7 +114,7 @@ export function WeekGrid({ monday, courses, slots, teacherName, rbsName, subject
                   <button
                     type="button"
                     ref={isHighlighted ? highlightRef : undefined}
-                    className="w-100 h-100 text-start"
+                    className="w-100 h-100 text-start d-flex flex-column justify-content-start"
                     aria-expanded={isOpen}
                     data-course-id={c._id}
                     onClick={() => setOpenId((id) => (id === c._id ? null : c._id))}
@@ -125,15 +125,15 @@ export function WeekGrid({ monday, courses, slots, teacherName, rbsName, subject
                       padding: '2px 6px',
                       overflow: 'hidden',
                       background: tagged ? TAGGED_BACKGROUND : groupColor(c.color),
-                      color: tagged ? '#222' : '#fff',
+                      color: textOn(tagged ? TAGGED_BACKGROUND : groupColor(c.color)),
                       opacity: past ? 0.55 : 1,
                       fontSize: 12,
                       lineHeight: 1.25,
                     }}
                   >
-                    <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subject}</div>
-                    {audience && <div style={{ fontStyle: 'italic' }}>{audience}</div>}
-                    {rooms.length > 0 && <div>{t('edt.utils.room')} : {rooms.join(', ')}</div>}
+                    <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0, maxWidth: '100%' }}>{subject}</div>
+                    {audience && <div style={{ fontStyle: 'italic', flexShrink: 0 }}>{audience}</div>}
+                    {rooms.length > 0 && <div style={{ flexShrink: 0 }}>{t('edt.utils.room')} : {rooms.join(', ')}</div>}
                     {tagged && <div>{(c.tags ?? []).map((tag) => tag.abbreviation).filter(Boolean).join(' ')}</div>}
                   </button>
                   {isOpen && (

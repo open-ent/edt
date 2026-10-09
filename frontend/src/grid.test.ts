@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Course, TimeSlot } from './api';
+import { textOn } from './colors';
 import { axisBounds, courseSubject, dayOf, isPast, minutesOf, minutesOfHour, placeDay } from './grid';
 
 const course = (id: string, start: string, end: string, extra: Partial<Course> = {}): Course => ({
@@ -71,5 +72,14 @@ describe('libellés et état', () => {
     const c = course('a', '08:00', '09:00');
     expect(isPast(c, new Date('2026-10-12T09:30:00'))).toBe(true);
     expect(isPast(c, new Date('2026-10-12T08:30:00'))).toBe(false);
+  });
+});
+
+describe('contraste du texte sur les teintes de classe', () => {
+  it('texte sombre sur une teinte pâle, blanc sur une teinte foncée', () => {
+    expect(textOn('rgba(252, 66, 123, 0.7)')).toBe('#1f1f1f'); // pink-lighter
+    expect(textOn('rgba(85, 230, 193, 0.7)')).toBe('#1f1f1f'); // garden-blue-lighter
+    expect(textOn('rgba(109, 33, 79, 1)')).toBe('#ffffff'); // magenta
+    expect(textOn('rgba(22, 46, 174, 1)')).toBe('#ffffff'); // dark-blue
   });
 });

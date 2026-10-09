@@ -38,3 +38,21 @@ const PALETTE: Record<string, string> = {
 
 /** Teinte d'une classe ; gris neutre si la couleur est absente ou inconnue (ex. groupe manuel sans couleur). */
 export const groupColor = (name: string | undefined): string => (name && PALETTE[name]) || 'rgba(160, 167, 179, 1)';
+
+/**
+ * Couleur de texte lisible sur une teinte de classe : sombre sur les teintes claires, blanche sur les
+ * foncées (luminance relative WCAG, fond semi-transparent composé sur du blanc).
+ * Ex. 'pink-lighter' (rose pâle) → texte sombre ; 'magenta' → texte blanc.
+ */
+export function textOn(background: string): string {
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(background);
+  if (!m) return '#1f1f1f';
+  const alpha = m[4] === undefined ? 1 : Number(m[4]);
+  const channel = (v: number) => {
+    const c = (alpha * v + (1 - alpha) * 255) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * channel(Number(m[1])) + 0.7152 * channel(Number(m[2])) + 0.0722 * channel(Number(m[3]));
+  // Contraste du blanc (1.05 / (L + 0.05)) contre celui du texte sombre ((L + 0.05) / 0.0625).
+  return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.0625 ? '#ffffff' : '#1f1f1f';
+}
