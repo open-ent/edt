@@ -49,6 +49,17 @@ export interface Course {
   idEndSlot?: string;
   startDate: string;
   endDate: string;
+  /** Matière du référentiel, ex. { id, name: "MATHEMATIQUES" }. */
+  subject?: { id?: string; name?: string };
+  /** Matière personnalisée saisie en texte libre (prioritaire sur `subject`). */
+  exceptionnal?: string;
+  /** Couleur nommée de la classe, ex. "keppel-blue-lighter" (cf. colors.ts). */
+  color?: string;
+  /** Étiquettes du cours, déjà résolues par le serveur, ex. [{ label: "Travaux dirigés", abbreviation: "TD" }]. */
+  tags?: Array<{ id: number; label: string; abbreviation?: string }>;
+  /** Ressources RBS liées (identifiants numériques, libellés via getRbsResources). */
+  rbsResourceIds?: number[];
+  recurrence?: string;
 }
 
 /** Corps du POST courses (cf. calendarItems.ts : filtre par groupes et/ou enseignants). */
@@ -163,6 +174,14 @@ export const getCourses = async (
       body: JSON.stringify(filter),
     }),
   );
+
+/** Ressources RBS de l'établissement, par identifiant, ex. { 12: "Salle 201" }. */
+export const getRbsResources = async (structureId: string): Promise<Map<number, string>> => {
+  const body = await json<{ resources?: Array<{ id: number; name: string }> }>(
+    await fetch(`/edt/structures/${structureId}/rbs/resources`, base),
+  );
+  return new Map((body?.resources ?? []).map((r) => [r.id, r.name]));
+};
 
 // ── Établissement mémorisé (préférence partagée avec l'IHM AngularJS) ───────────
 /** Préférence `edt.structure` : dernier établissement consulté, ex. `{ id: "…", name: "Collège A" }`. */
@@ -324,6 +343,7 @@ export const api = {
   getSubGroups,
   getTeachers,
   getCourses,
+  getRbsResources,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,

@@ -55,3 +55,11 @@ describe('weekLabel', () => {
     expect(weekLabel(new Date(2026, 8, 14))).toBe('du 14/09 au 20/09');
   });
 });
+
+describe('dates serveur avec espace', () => {
+  it('sont lues comme des dates ISO', () => {
+    expect(hhmm('2026-10-12 08:05:00')).toBe('08:05');
+    expect(dayLabel('2026-10-12 08:05:00')).toBe(dayLabel('2026-10-12T08:05:00'));
+    expect(courseSortKey('2026-10-12 08:05:00')).toBe(courseSortKey('2026-10-12T08:05:00'));
+  });
+});

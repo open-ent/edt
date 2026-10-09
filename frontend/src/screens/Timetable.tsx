@@ -6,17 +6,12 @@ import { useSearchParams } from 'react-router-dom';
 import { api, Course, Group } from '../api';
 import { composesOwnFilter, sortGroups } from '../context';
 import { FilterSidebar } from '../features/FilterSidebar';
+import { WeekGrid } from '../features/WeekGrid';
+import { courseSubject } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { addDays, courseSortKey, dayLabel, hhmm, mondayOf, weekLabel, ymd } from '../utils';
 
-const JOURS: Array<{ dow: number; label: string }> = [
-  { dow: 1, label: 'Lundi' },
-  { dow: 2, label: 'Mardi' },
-  { dow: 3, label: 'Mercredi' },
-  { dow: 4, label: 'Jeudi' },
-  { dow: 5, label: 'Vendredi' },
-];
 
 /** Emploi du temps des classes, groupes et enseignants choisis, sur une semaine (grille ou liste). */
 export function Timetable() {
@@ -106,7 +101,7 @@ export function Timetable() {
   const groupLabel = (g: Group) => (g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name);
   const subjectName = useMemo(() => new Map((matieresQuery.data ?? []).map((m) => [m.id, m.name])), [matieresQuery.data]);
   const slots = slotsQuery.data ?? [];
-  const courseTitle = (c: Course) => c.subjectLabel ?? (c.subjectId ? subjectName.get(c.subjectId) ?? c.subjectId : '');
+  const teacherName = (id: string) => teachersQuery.data?.find((x) => x.id === id)?.displayName;
 
   const startAt = ymd(monday);
   const endAt = ymd(addDays(monday, 6));
@@ -122,6 +117,15 @@ export function Timetable() {
   });
 
   const courses = [...(coursesQuery.data ?? [])].sort((a, b) => courseSortKey(a.startDate) - courseSortKey(b.startDate));
+  // Libellés des ressources RBS, chargés seulement si un cours affiché en porte (cf. AngularJS
+  // calendarItems.resolveRbsResourceLabels) — inutile pour un établissement sans RBS.
+  const hasRbs = courses.some((c) => (c.rbsResourceIds ?? []).length > 0);
+  const rbsQuery = useQuery({
+    queryKey: ['edt', 'rbs-resources', structureId],
+    queryFn: () => api.getRbsResources(structureId),
+    enabled: !!structureId && hasRbs,
+    staleTime: 5 * 60_000,
+  });
 
   // Cours ciblé par le lien profond (date + heure de début).
   const highlightCourse = targetDate && targetStart
@@ -132,27 +136,6 @@ export function Timetable() {
     if (highlightCourse) highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [highlightCourse]);
 
-  // Indexation des cours par (créneau de début, jour de la semaine) pour la grille.
-  // Les cours créés manuellement n'ont pas d'idStartSlot : le créneau est alors résolu
-  // par l'heure de début (slot dont l'intervalle contient l'heure du cours).
-  const byCell = useMemo(() => {
-    const toMin = (s?: string) => {
-      const m2 = /(\d{1,2}):(\d{2})/.exec(s ?? '');
-      return m2 ? Number(m2[1]) * 60 + Number(m2[2]) : -1;
-    };
-    const slotFor = (c: Course) => {
-      if (c.idStartSlot) return c.idStartSlot;
-      const startMin = toMin((c.startDate || '').slice(11, 16));
-      return slots.find((sl) => toMin(sl.startHour) <= startMin && startMin < toMin(sl.endHour))?.id;
-    };
-    const m = new Map<string, Course>();
-    for (const c of courses) {
-      const dow = c.dayOfWeek ?? ((new Date(c.startDate).getDay() + 6) % 7) + 1;
-      const slotId = slotFor(c);
-      if (slotId) m.set(`${slotId}|${dow}`, c);
-    }
-    return m;
-  }, [courses, slots]);
 
   if (ctx.ready && ctx.structures.length === 0) {
     return (
@@ -304,53 +287,23 @@ export function Timetable() {
         <p className="text-muted">{t('edt.courses.empty', { defaultValue: 'Aucun cours sur cette semaine.' })}</p>
       )}
 
-      {/* Vue GRILLE : créneaux horaires × jours */}
-      {hasSelection && view === 'grid' && slots.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table" style={{ tableLayout: 'fixed', minWidth: 760 }}>
-            <thead>
-              <tr>
-                <th style={{ width: 110 }}>{t('edt.hours', { defaultValue: 'Horaire' })}</th>
-                {JOURS.map((j) => <th key={j.dow}>{j.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {slots.map((s) => (
-                <tr key={s.id}>
-                  <th scope="row" className="text-muted" style={{ fontWeight: 400, whiteSpace: 'nowrap' }}>
-                    {s.name} <span style={{ fontSize: 12 }}>{s.startHour}–{s.endHour}</span>
-                  </th>
-                  {JOURS.map((j) => {
-                    const c = byCell.get(`${s.id}|${j.dow}`);
-                    const isHighlighted = !!c && c === highlightCourse;
-                    return (
-                      <td key={j.dow} style={{ verticalAlign: 'top' }}>
-                        {c && (
-                          <div
-                            ref={isHighlighted ? (el) => { highlightRef.current = el; } : undefined}
-                            style={{
-                              background: isHighlighted ? '#fff3cd' : '#e8f4fa',
-                              borderLeft: `3px solid ${isHighlighted ? '#e0a800' : '#4bafd5'}`,
-                              borderRadius: 3,
-                              padding: '4px 6px',
-                              ...(isHighlighted && { boxShadow: '0 0 0 2px #e0a800' }),
-                            }}
-                          >
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>{courseTitle(c)}</div>
-                            {(c.roomLabels ?? []).length > 0 && <div className="text-muted" style={{ fontSize: 12 }}>{(c.roomLabels ?? []).join(', ')}</div>}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {courses.length === 0 && (
-            <p className="text-muted">{t('edt.courses.empty.grid', { defaultValue: 'Aucun cours positionné sur cette semaine (grille horaire de l\'établissement affichée).' })}</p>
+      {/* Vue GRILLE : semaine sur un axe horaire réel, cours simultanés côte à côte */}
+      {hasSelection && view === 'grid' && (
+        <>
+          <WeekGrid
+            monday={monday}
+            courses={courses}
+            slots={slots}
+            teacherName={teacherName}
+            rbsName={(id) => rbsQuery.data?.get(id)}
+            subjectName={(id) => subjectName.get(id)}
+            highlighted={highlightCourse}
+            highlightRef={(el) => { highlightRef.current = el; }}
+          />
+          {!coursesQuery.isLoading && courses.length === 0 && (
+            <p className="text-muted mt-8">{t('edt.courses.empty.grid')}</p>
           )}
-        </div>
+        </>
       )}
 
       {/* Vue LISTE */}
@@ -361,6 +314,8 @@ export function Timetable() {
               <th>{t('edt.day', { defaultValue: 'Jour' })}</th>
               <th>{t('edt.hours', { defaultValue: 'Horaire' })}</th>
               <th>{t('edt.subject', { defaultValue: 'Matière' })}</th>
+              <th>{t('edt.timetable.filter.title')}</th>
+              <th>{t('edt.timetable.filter.teachers')}</th>
               <th>{t('edt.room', { defaultValue: 'Salle' })}</th>
             </tr>
           </thead>
@@ -369,13 +324,15 @@ export function Timetable() {
               const isHighlighted = c === highlightCourse;
               return (
                 <tr
-                  key={c._id}
+                  key={`${c._id}|${c.startDate}`}
                   ref={isHighlighted ? (el) => { highlightRef.current = el; } : undefined}
                   style={isHighlighted ? { background: '#fff3cd', boxShadow: 'inset 0 0 0 2px #e0a800' } : undefined}
                 >
                   <td>{dayLabel(c.startDate)}</td>
                   <td>{hhmm(c.startDate)} – {hhmm(c.endDate)}</td>
-                  <td>{courseTitle(c)}</td>
+                  <td>{courseSubject(c, (id) => subjectName.get(id))}</td>
+                  <td>{[...(c.classes ?? []), ...(c.groups ?? [])].join(', ')}</td>
+                  <td>{(c.teacherIds ?? []).map(teacherName).filter(Boolean).join(', ')}</td>
                   <td>{(c.roomLabels ?? []).join(', ')}</td>
                 </tr>
               );

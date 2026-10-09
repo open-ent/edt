@@ -23,10 +23,16 @@ export function mondayOf(d: Date): Date {
 
 const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
+/**
+ * Date serveur → Date locale. Le serveur renvoie « 2026-10-12 08:00:00 » (espace) : Chrome le lit,
+ * Safari non — on passe donc toujours par le format ISO « 2026-10-12T08:00:00 ».
+ */
+export const parseServerDate = (value: string): Date => new Date(value.replace(' ', 'T'));
+
 /** Libellé du jour d'une date ISO (« Lundi »…). '' si illisible. */
 export function dayLabel(iso?: string): string {
   if (!iso) return '';
-  const d = new Date(iso);
+  const d = parseServerDate(iso);
   if (Number.isNaN(d.getTime())) return '';
   return JOURS[(d.getDay() + 6) % 7];
 }
@@ -34,14 +40,14 @@ export function dayLabel(iso?: string): string {
 /** Heure « HH:MM » d'une date ISO. '' si illisible. */
 export function hhmm(iso?: string): string {
   if (!iso) return '';
-  const d = new Date(iso);
+  const d = parseServerDate(iso);
   if (Number.isNaN(d.getTime())) return '';
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** Clé de tri chronologique d'un cours (par date de début ISO). */
 export function courseSortKey(iso?: string): number {
-  const t = iso ? new Date(iso).getTime() : NaN;
+  const t = iso ? parseServerDate(iso).getTime() : NaN;
   return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
 }
 
