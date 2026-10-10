@@ -384,6 +384,12 @@ export const getRecurrenceDates = async (recurrence: string): Promise<{ startDat
 export const updateRecurrence = async (recurrence: string, course: Record<string, unknown>): Promise<{ rbsConflicts?: Array<{ conflictResourceIds?: number[] }> } | null> =>
   json(await fetch(`/edt/courses/recurrences/${recurrence}`, { ...base, method: 'PUT', headers: mutHeaders(), body: JSON.stringify(course) }));
 
+/** Pose une étiquette sur plusieurs cours d'un coup (PUT /edt/courses/tag, comme l'AngularJS). */
+export const updateCoursesTag = async (courseIds: string[], tagId: number): Promise<void> => {
+  const res = await fetch('/edt/courses/tag', { ...base, method: 'PUT', headers: mutHeaders(), body: JSON.stringify({ courseIds, tagId }) });
+  if (!res.ok) throw new Error(String(res.status));
+};
+
 /** Supprime une occurrence. */
 export const deleteCourse = async (id: string): Promise<void> => {
   const res = await fetch(`/edt/courses/${id}`, { ...base, method: 'DELETE', headers: mutHeaders() });
@@ -490,6 +496,7 @@ export const api = {
   updateCourse,
   deleteCourse,
   deleteRecurrence,
+  updateCoursesTag,
   getRecurrenceDates,
   updateRecurrence,
   getStructurePreference,

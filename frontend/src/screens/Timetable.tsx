@@ -5,17 +5,19 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { api, childClasses, Course } from '../api';
 import { ALL_STRUCTURES, composesOwnFilter, sortGroups } from '../context';
+import { BulkActionsBar } from '../features/BulkActionsBar';
 import { DeleteCourseDialog } from '../features/DeleteCourseDialog';
 import { EditScopeDialog } from '../features/EditScopeDialog';
 import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
 import { SearchBox } from '../features/SearchBox';
-import { CourseActions, WeekGrid } from '../features/WeekGrid';
+import { CourseActions, CourseSelection, WeekGrid } from '../features/WeekGrid';
 import { courseSubject } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection, toggleGroup } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { useTimetableState } from '../hooks/useTimetableState';
 import { initialAnchor, periodOf, step, VIEW_MODES } from '../period';
+import { toggleSelected } from '../selection';
 import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
 
 
@@ -197,6 +199,19 @@ export function Timetable() {
     ctx.canManage && !ctx.allStructures
       ? { onEdit: (c) => (c.recurrence ? setToEdit(c) : navigate(`/edit/${c._id}`)), onDelete: setToDelete }
       : undefined;
+  // Actions de masse : mode sélection (un clic coche un cours), clic droit toujours actif.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const courseSelection: CourseSelection | undefined = actions
+    ? {
+        active: selectMode,
+        ids: selectedIds,
+        toggle: (c) => {
+          setSelectMode(true);
+          setSelectedIds((prev) => toggleSelected(prev, c, new Date()));
+        },
+      }
+    : undefined;
   const courseLabel = (c: Course) =>
     `${courseSubject(c, (id) => subjectName.get(id))} — ${new Date(c.startDate.replace(' ', 'T')).toLocaleDateString(i18n.language || 'fr', { weekday: 'long', day: 'numeric', month: 'long' })} ${hhmm(c.startDate)}`;
 
@@ -352,6 +367,19 @@ export function Timetable() {
         )}
       </div>
 
+      {hasSelection && view === 'grid' && actions && (
+        <div className="mb-12">
+          <BulkActionsBar
+            structureId={structureId}
+            courses={courses}
+            active={selectMode}
+            selected={selectedIds}
+            onActivate={setSelectMode}
+            onSelect={setSelectedIds}
+          />
+        </div>
+      )}
+
       {!hasSelection && (
         <p className="text-muted">{t(ctx.allStructures ? 'edt.timetable.all.structures.hint' : 'edt.timetable.select.prompt')}</p>
       )}
@@ -372,6 +400,7 @@ export function Timetable() {
           rbsName={(id) => rbsQuery.data?.get(id)}
           subjectName={(id) => subjectName.get(id)}
           actions={actions}
+          selection={courseSelection}
         />
       )}
 
@@ -381,6 +410,7 @@ export function Timetable() {
             days={period.days}
             showQuarterHours={showQuarterHours}
             actions={actions}
+            selection={courseSelection}
             courses={courses}
             slots={slots}
             teacherName={teacherName}

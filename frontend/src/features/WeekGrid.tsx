@@ -19,6 +19,8 @@ interface Props {
   showQuarterHours?: boolean;
   /** Actions du détail d'un cours (gestionnaires seulement), cf. CourseActions. */
   actions?: CourseActions;
+  /** Sélection pour les actions de masse (gestionnaires seulement). */
+  selection?: CourseSelection;
   courses: Course[];
   slots: TimeSlot[];
   teacherName: (id: string) => string | undefined;
@@ -40,7 +42,7 @@ const hhmm = (minutes: number) =>
  * masqué). Survol ou clic sur un cours → détail (horaire, enseignants, classes, salles, ressources
  * RBS, étiquettes). Ex. deux cours de 08:00 à 09:00 le lundi → deux colonnes côte à côte.
  */
-export function WeekGrid({ days, showQuarterHours = true, actions, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt }: Props) {
+export function WeekGrid({ days, showQuarterHours = true, actions, selection, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt }: Props) {
   const { t, i18n } = useTranslation(['edt', 'common']);
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -143,7 +145,7 @@ export function WeekGrid({ days, showQuarterHours = true, actions, courses, slot
             {(placedByDay.get(ymd(d)) ?? []).map(({ course: c, start: from, end: to, lane, lanes }) => {
               const tagged = (c.tags ?? []).length > 0;
               const past = isPast(c, now);
-              const isOpen = openId === c._id || hoverId === c._id;
+              const isOpen = !selection?.active && (openId === c._id || hoverId === c._id);
               const isHighlighted = highlighted?._id === c._id && dayOf(highlighted.startDate) === dayOf(c.startDate);
               const subject = courseSubject(c, subjectName);
               const audience = [...(c.classes ?? []), ...(c.groups ?? [])].join(' ');
@@ -167,11 +169,20 @@ export function WeekGrid({ days, showQuarterHours = true, actions, courses, slot
                     type="button"
                     ref={isHighlighted ? highlightRef : undefined}
                     className="w-100 h-100 text-start d-flex flex-column justify-content-start"
-                    aria-expanded={isOpen}
+                    aria-expanded={selection?.active ? undefined : isOpen}
+                    aria-pressed={selection?.active ? selection.ids.has(c._id) : undefined}
                     data-course-id={c._id}
-                    onClick={() => setOpenId((id) => (id === c._id ? null : c._id))}
+                    data-selected={selection?.ids.has(c._id) || undefined}
+                    onClick={() => (selection?.active ? selection.toggle(c) : setOpenId((id) => (id === c._id ? null : c._id)))}
+                    onContextMenu={(e) => {
+                      if (!selection) return;
+                      e.preventDefault();
+                      selection.toggle(c);
+                    }}
                     style={{
                       border: isHighlighted ? '2px solid #e0a800' : 0,
+                      outline: selection?.ids.has(c._id) ? '3px solid #1a5fb4' : undefined,
+                      outlineOffset: -3,
                       borderLeft: `4px solid ${groupColor(c.color)}`,
                       borderRadius: 4,
                       padding: '2px 6px',
@@ -183,7 +194,10 @@ export function WeekGrid({ days, showQuarterHours = true, actions, courses, slot
                       lineHeight: 1.25,
                     }}
                   >
-                    <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0, maxWidth: '100%' }}>{subject}</div>
+                    <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0, maxWidth: '100%' }}>
+                      {selection?.ids.has(c._id) && <span aria-hidden>✓ </span>}
+                      {subject}
+                    </div>
                     {audience && <div style={{ fontStyle: 'italic', flexShrink: 0 }}>{audience}</div>}
                     {rooms.length > 0 && <div style={{ flexShrink: 0 }}>{t('edt.utils.room')} : {rooms.join(', ')}</div>}
                     {tagged && <div>{(c.tags ?? []).map((tag) => tag.abbreviation).filter(Boolean).join(' ')}</div>}
@@ -226,6 +240,16 @@ interface DetailsProps {
   above?: boolean;
   /** Ouvert par un clic (boutons utilisables) ; faux pour un détail de survol. */
   interactive?: boolean;
+}
+
+/**
+ * Sélection de cours pour les actions de masse : `active` = mode sélection (un clic coche/décoche) ;
+ * le clic droit coche/décoche toujours, comme l'AngularJS.
+ */
+export interface CourseSelection {
+  active: boolean;
+  ids: ReadonlySet<string>;
+  toggle: (course: Course) => void;
 }
 
 /** Modifier / supprimer depuis le détail d'un cours ; absent pour qui ne gère pas les cours. */

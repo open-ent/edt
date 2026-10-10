@@ -5,7 +5,7 @@ import type { Course } from '../api';
 import { groupColor, textOn } from '../colors';
 import { courseSubject, dayOf, isPast, minutesOf } from '../grid';
 import { ymd } from '../utils';
-import { CourseActions, CourseDetails } from './WeekGrid';
+import { CourseActions, CourseDetails, CourseSelection } from './WeekGrid';
 
 interface Props {
   /** Jours affichés, par semaines entières (14 en quinzaine, 28 à 42 en mois). */
@@ -17,6 +17,7 @@ interface Props {
   rbsName: (id: number) => string | undefined;
   subjectName: (id: string) => string | undefined;
   actions?: CourseActions;
+  selection?: CourseSelection;
 }
 
 const hhmm = (minutes: number) =>
@@ -27,7 +28,7 @@ const hhmm = (minutes: number) =>
  * avec leur matière (même présentation que la vue mois AngularJS, template/calendar/course-month.html).
  * Clic sur un cours → détail. Ex. quinzaine du 12/10 : deux rangées de sept jours.
  */
-export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectName, actions }: Props) {
+export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectName, actions, selection }: Props) {
   const { i18n } = useTranslation(['edt', 'common']);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const now = new Date();
@@ -80,8 +81,15 @@ export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectN
                     <button
                       type="button"
                       data-course-id={c._id}
-                      aria-expanded={openKey === k}
-                      onClick={() => setOpenKey((x) => (x === k ? null : k))}
+                      aria-expanded={selection?.active ? undefined : openKey === k}
+                      aria-pressed={selection?.active ? selection.ids.has(c._id) : undefined}
+                      data-selected={selection?.ids.has(c._id) || undefined}
+                      onClick={() => (selection?.active ? selection.toggle(c) : setOpenKey((x) => (x === k ? null : k)))}
+                      onContextMenu={(e) => {
+                        if (!selection) return;
+                        e.preventDefault();
+                        selection.toggle(c);
+                      }}
                       className="w-100 text-start mb-4"
                       style={{
                         border: 0,
@@ -91,11 +99,14 @@ export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectN
                         background: color,
                         color: textOn(color),
                         opacity: isPast(c, now) ? 0.55 : 1,
+                        outline: selection?.ids.has(c._id) ? '3px solid #1a5fb4' : undefined,
+                        outlineOffset: -3,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                       }}
                     >
+                      {selection?.ids.has(c._id) ? '✓ ' : ''}
                       {hhmm(from)} {subject}
                     </button>
                     {openKey === k && (
