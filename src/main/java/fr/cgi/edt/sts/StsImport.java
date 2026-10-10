@@ -64,11 +64,17 @@ public class StsImport {
 
             Promise future = promises.get(filenames.indexOf(upload.filename()));
             final String filename = path + File.separator + upload.filename();
-            upload.endHandler(event -> {
-                log.info("File " + upload.filename() + " uploaded as " + upload.filename());
-                future.complete();
+            // Vert.x 4 : streamToFileSystem pose ses propres gestionnaires de fin (il remplaçait le
+            // endHandler posé avant, qui ne se déclenchait jamais : l'import restait sans réponse).
+            // On attend donc le Future qu'il renvoie. Ex. sts_emp.xml écrit → promesse du fichier 1 tenue.
+            upload.streamToFileSystem(filename).onComplete(written -> {
+                if (written.succeeded()) {
+                    log.info("File " + upload.filename() + " uploaded as " + filename);
+                    future.complete();
+                } else {
+                    future.fail(written.cause());
+                }
             });
-            upload.streamToFileSystem(filename);
         });
 
         vertx.fileSystem().mkdir(path, event -> {

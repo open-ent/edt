@@ -4,7 +4,10 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEdtContext } from '../hooks/useEdtContext';
 
 /** Onglets de l'administration, ex. #/admin (étiquettes), #/admin/import (import STS). */
-const TABS = [{ to: '/admin', end: true, label: 'edt.admin.course.tags.title' }];
+const TABS = [
+  { to: '/admin', end: true, label: 'edt.admin.course.tags.title' },
+  { to: '/admin/import', end: false, label: 'edt.admin.tab.import' },
+];
 
 /**
  * Administration de l'emploi du temps (gestionnaires), réunie dans la nouvelle interface : ce que

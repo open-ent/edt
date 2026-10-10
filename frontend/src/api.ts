@@ -277,6 +277,30 @@ const tagRequest = async (url: string, method: string, body?: unknown): Promise<
   if (!res.ok) throw new Error(String(res.status));
 };
 
+/** Rapport d'un import STS précédent : date et texte du rapport (gabarit sts-report.txt du serveur). */
+export interface StsReport {
+  created?: string | { $date?: string | number };
+  report: string;
+}
+
+/** Rapports des imports STS de l'établissement, du plus récent au plus ancien. */
+export const getStsReports = async (structureId: string): Promise<StsReport[]> =>
+  (await json<StsReport[]>(await fetch(`/edt/structures/${structureId}/sts/reports`, base))) ?? [];
+
+/**
+ * Import STS (deux fichiers XML, STS-EMP et EMP-STS), comme le sniplet AngularJS : envoi multipart
+ * (sans Content-Type JSON). Réponse : { report } ; en cas d'échec, l'erreur porte une clé de libellé,
+ * ex. « edt.sts.import.error.unauthorized ».
+ */
+export const importSts = async (structureId: string, stsEmp: File, empSts: File): Promise<{ ok: boolean; report?: string; error?: string }> => {
+  const form = new FormData();
+  form.append('file1', stsEmp);
+  form.append('file2', empSts);
+  const res = await fetch(`/edt/structures/${structureId}/sts`, { ...base, method: 'POST', headers: xsrfHeader(), body: form });
+  const body = (await res.json().catch(() => null)) as { report?: string; error?: string } | null;
+  return res.ok ? { ok: true, report: body?.report } : { ok: false, error: body?.error };
+};
+
 /** Administration des étiquettes de cours, mêmes routes que l'AngularJS (services/courseTag.service.ts). */
 export const createCourseTag = (structureId: string, tag: CourseTagInput) => tagRequest(`/edt/structures/${structureId}/course/tag`, 'POST', tag);
 export const updateCourseTag = (id: number, tag: CourseTagInput) => tagRequest('/edt/course/tag', 'PUT', { ...tag, id });
@@ -511,6 +535,8 @@ export const api = {
   searchGroups,
   getSubjects,
   getCourseTags,
+  getStsReports,
+  importSts,
   createCourseTag,
   updateCourseTag,
   deleteCourseTag,
