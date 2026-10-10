@@ -504,7 +504,39 @@ public class EdtController extends MongoDbControllerHelper {
     @Trace("PUT_RECURRENCE")
     public void updateRecurrence(HttpServerRequest request) {
         String id = request.getParam("id");
-        RequestUtils.bodyToJson(request, course -> edtService.updateRecurrence(id, course, arrayResponseHandler(request)));
+        RequestUtils.bodyToJson(request, course -> UserUtils.getUserInfos(eb, request, user -> {
+            // Réservations RBS des occurrences à venir AVANT modification (rattachées ou posées par
+            // l'import des salles) : remplacées ensuite par des réservations rattachées aux
+            // occurrences modifiées, au nouveau créneau. Ex. série du lundi 8 h déplacée au mardi
+            // 10 h : la salle est libérée le lundi et réservée le mardi.
+            edtService.getFutureRecurrence(id).otherwise(new JsonArray()).compose(before -> {
+                List<Future<JsonArray>> owned = new ArrayList<>();
+                before.forEach(c -> owned.add(RbsBridgeService.ownBookingIds(eb, (JsonObject) c)));
+                return Future.all(owned).otherwiseEmpty().map(v -> {
+                    JsonArray ids = new JsonArray();
+                    owned.forEach(f -> { if (f.succeeded()) f.result().forEach(b -> { if (!ids.contains(b)) ids.add(b); }); });
+                    return ids;
+                });
+            }).onComplete(oldBookings -> edtService.updateRecurrence(id, course, result -> {
+                if (result.isLeft()) {
+                    renderError(request);
+                    return;
+                }
+                JsonObject response = new JsonObject().put("courses", result.right().getValue());
+                String newRecurrence = course.getString("newRecurrence");
+                if (user == null || newRecurrence == null) {
+                    renderJson(request, response);
+                    return;
+                }
+                RbsBridgeService.deleteBookingsThen(eb, oldBookings.succeeded() ? oldBookings.result() : new JsonArray(), user.getUserId())
+                        .compose(v -> edtService.getFutureRecurrence(newRecurrence))
+                        .compose(after -> RbsBridgeService.syncBookings(eb, after, user.getUserId()))
+                        .onComplete(ar -> {
+                            if (ar.succeeded() && !ar.result().isEmpty()) response.put("rbsConflicts", ar.result());
+                            renderJson(request, response);
+                        });
+            }));
+        }));
     }
 
     @Delete("/courses/:id")

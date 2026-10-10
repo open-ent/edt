@@ -319,13 +319,15 @@ export const getBusyResourcesForSlots = async (
   structureId: string,
   slots: Array<{ startAt: string; endAt: string }>,
   courseId?: string,
+  /** Série modifiée : ses occurrences à venir et leurs réservations ne comptent pas. */
+  recurrence?: string,
 ): Promise<{ busy: number[]; dates: Record<string, string[]> }> => {
   const body = await json<{ busy?: number[]; dates?: Record<string, string[]> }>(
     await fetch(`/edt/structures/${structureId}/rbs/availability`, {
       ...base,
       method: 'POST',
       headers: mutHeaders(),
-      body: JSON.stringify({ slots, course: courseId }),
+      body: JSON.stringify({ slots, course: courseId, recurrence }),
     }),
   );
   return { busy: body?.busy ?? [], dates: body?.dates ?? {} };
@@ -369,6 +371,18 @@ export const getCourse = async (id: string): Promise<StoredCourse> => json<Store
  */
 export const updateCourse = async (id: string, course: Record<string, unknown>): Promise<{ rbsConflicts?: Array<{ conflictResourceIds?: number[] }> } | null> =>
   json(await fetch('/edt/course', { ...base, method: 'PUT', headers: mutHeaders(), body: JSON.stringify([{ ...course, _id: id }]) }));
+
+/** Bornes d'une série, ex. { startDate: "2026-09-07…", endDate: "2027-07-02…" }. */
+export const getRecurrenceDates = async (recurrence: string): Promise<{ startDate: string; endDate: string }> =>
+  json(await fetch(`/edt/courses/recurrences/dates/${recurrence}`, base));
+
+/**
+ * Modifie toutes les occurrences À VENIR d'une série (PUT /edt/courses/recurrences/:id, comme
+ * l'AngularJS) : `startDate`/`endDate` portent la nouvelle période et l'horaire, `dayOfWeek` le jour,
+ * `newRecurrence` le nouvel identifiant de la série. Les réservations RBS suivent (rbsConflicts).
+ */
+export const updateRecurrence = async (recurrence: string, course: Record<string, unknown>): Promise<{ rbsConflicts?: Array<{ conflictResourceIds?: number[] }> } | null> =>
+  json(await fetch(`/edt/courses/recurrences/${recurrence}`, { ...base, method: 'PUT', headers: mutHeaders(), body: JSON.stringify(course) }));
 
 /** Supprime une occurrence. */
 export const deleteCourse = async (id: string): Promise<void> => {
@@ -476,6 +490,8 @@ export const api = {
   updateCourse,
   deleteCourse,
   deleteRecurrence,
+  getRecurrenceDates,
+  updateRecurrence,
   getStructurePreference,
   saveStructurePreference,
   getMatieres,

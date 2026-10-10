@@ -2,6 +2,7 @@ package fr.cgi.edt.controllers;
 
 
 import fr.cgi.edt.security.EdtAccessIfMyStructure;
+import fr.cgi.edt.utils.DateHelper;
 import java.util.List;
 import java.util.ArrayList;
 import fr.wseduc.mongodb.MongoDb;
@@ -125,13 +126,13 @@ public class CourseController extends ControllerHelper {
         }
         List<String[]> slots = new ArrayList<>();
         slots.add(new String[]{startAt, endAt});
-        rbsAvailability(request.getParam("structureId"), request.params().get("course"), slots)
+        rbsAvailability(request.getParam("structureId"), request.params().get("course"), null, slots)
                 .onSuccess(result -> renderJson(request, result))
                 .onFailure(err -> renderError(request));
     }
 
     @Post("/structures/:structureId/rbs/availability")
-    @ApiDoc("Comme GET …/rbs/availability, pour plusieurs créneaux d'un coup (série de cours) : {slots:[{startAt,endAt}], course?} → {busy:[ids], dates:{id:[jours]}}.")
+    @ApiDoc("Comme GET …/rbs/availability, pour plusieurs créneaux d'un coup (série de cours) : {slots:[{startAt,endAt}], course?, recurrence?} → {busy:[ids], dates:{id:[jours]}}. recurrence : série modifiée, dont les occurrences à venir et leurs réservations ne comptent pas.")
     @SecuredAction(value = "", type = ActionType.RESOURCE)
     @ResourceFilter(EdtAccessIfMyStructure.class)
     public void postRbsAvailability(final HttpServerRequest request) {
@@ -148,13 +149,23 @@ public class CourseController extends ControllerHelper {
                 badRequest(request);
                 return;
             }
-            rbsAvailability(request.getParam("structureId"), body.getString("course"), slots)
+            rbsAvailability(request.getParam("structureId"), body.getString("course"), body.getString("recurrence"), slots)
                     .onSuccess(result -> renderJson(request, result))
                     .onFailure(err -> renderError(request));
         });
     }
 
     private static final int MAX_AVAILABILITY_SLOTS = 500;
+
+    /** Occurrences à venir d'une série (même filtre qu'EdtServiceMongoImpl.matcherFutureRecurrence). */
+    private Future<JsonArray> futureRecurrence(String recurrence) {
+        Promise<JsonArray> promise = Promise.promise();
+        JsonObject matcher = new JsonObject().put("recurrence", recurrence)
+                .put("startDate", new JsonObject().put("$gt", new DateHelper().now()));
+        MongoDb.getInstance().find(Edt.EDT_COLLECTION, matcher, msg -> promise.complete(
+                "ok".equals(msg.body().getString("status")) ? msg.body().getJsonArray("results", new JsonArray()) : new JsonArray()));
+        return promise.future();
+    }
 
     /**
      * Ressources RBS occupées sur des créneaux (heure de Paris) : réservées (hors réservations du
@@ -163,9 +174,20 @@ public class CourseController extends ControllerHelper {
      * période. Ex. lundis 12/10 et 19/10 08:00-09:00, salle 12 prise le 19 →
      * {busy: [12], dates: {"12": ["2026-10-19"]}}.
      */
-    private Future<JsonObject> rbsAvailability(String structureId, String courseId, List<String[]> slots) {
+    private Future<JsonObject> rbsAvailability(String structureId, String courseId, String recurrence, List<String[]> slots) {
         Promise<JsonArray> ownBookings = Promise.promise();
-        if (courseId == null || courseId.isEmpty()) ownBookings.complete(new JsonArray());
+        if (recurrence != null && !recurrence.isEmpty()) {
+            // Série modifiée : les réservations de toutes ses occurrences à venir sont les siennes.
+            futureRecurrence(recurrence).compose(occurrences -> {
+                List<Future<JsonArray>> owned = new ArrayList<>();
+                occurrences.forEach(c -> owned.add(RbsBridgeService.ownBookingIds(eb, (JsonObject) c)));
+                return Future.all(owned).otherwiseEmpty().map(v -> {
+                    JsonArray ids = new JsonArray();
+                    owned.forEach(f -> { if (f.succeeded()) f.result().forEach(b -> { if (!ids.contains(b)) ids.add(b); }); });
+                    return ids;
+                });
+            }).onComplete(ar -> ownBookings.complete(ar.succeeded() ? ar.result() : new JsonArray()));
+        } else if (courseId == null || courseId.isEmpty()) ownBookings.complete(new JsonArray());
         else MongoDb.getInstance().findOne(Edt.EDT_COLLECTION, new JsonObject().put("_id", courseId), msg -> {
             JsonObject course = "ok".equals(msg.body().getString("status")) ? msg.body().getJsonObject("result") : null;
             if (course == null) ownBookings.complete(new JsonArray());
@@ -190,7 +212,7 @@ public class CourseController extends ControllerHelper {
                     List<String> labels = new ArrayList<>();
                     for (Object o : courses.result()) {
                         JsonObject c = (JsonObject) o;
-                        if (Objects.equals(c.getString("_id"), courseId) || !overlaps(c, start, end)) continue;
+                        if (Objects.equals(c.getString("_id"), courseId) || (recurrence != null && recurrence.equals(c.getString("recurrence"))) || !overlaps(c, start, end)) continue;
                         c.getJsonArray("roomLabels", new JsonArray()).forEach(l -> { if (l != null) labels.add(String.valueOf(l)); });
                     }
                     String day = slots.get(i)[0].substring(0, 10);

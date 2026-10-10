@@ -269,6 +269,16 @@ public class EdtServiceMongoImpl extends MongoDbCrudService implements EdtServic
     /** Clé de la réponse de suppression portant les cours supprimés (retirée avant de répondre). */
     public static final String DELETED_COURSES = "courses";
 
+    @Override
+    public Future<JsonArray> getFutureRecurrence(String id) {
+        Promise<JsonArray> promise = Promise.promise();
+        MongoDb.getInstance().find(this.collection, matcherFutureRecurrence(id), MongoDbResult.validResultsHandler(result -> {
+            if (result.isRight()) promise.complete(result.right().getValue());
+            else promise.fail(result.left().getValue());
+        }));
+        return promise.future();
+    }
+
     private JsonObject matcherFutureRecurrence(String id) {
         return new JsonObject()
                 .put("recurrence", id)

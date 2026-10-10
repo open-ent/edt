@@ -88,4 +88,10 @@ public interface EdtService {
     void deleteCourse(String id, Handler<Either<String, JsonObject>> handler);
 
     void deleteRecurrence(String id, Handler<Either<String, JsonObject>> handler);
+
+    /**
+     * Occurrences à venir d'une série (startDate > maintenant), ex. pour en libérer ou en refaire
+     * les réservations RBS quand la série est modifiée.
+     */
+    Future<JsonArray> getFutureRecurrence(String id);
 }

@@ -6,6 +6,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, childClasses, Course } from '../api';
 import { ALL_STRUCTURES, composesOwnFilter, sortGroups } from '../context';
 import { DeleteCourseDialog } from '../features/DeleteCourseDialog';
+import { EditScopeDialog } from '../features/EditScopeDialog';
 import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
 import { SearchBox } from '../features/SearchBox';
@@ -190,8 +191,14 @@ export function Timetable() {
 
   // Modifier / supprimer depuis le détail d'un cours : gestionnaires, sur un établissement précis.
   const [toDelete, setToDelete] = useState<Course | null>(null);
+  // Cours d'une série : on demande d'abord « ce cours seulement » ou « toute la série ».
+  const [toEdit, setToEdit] = useState<Course | null>(null);
   const actions: CourseActions | undefined =
-    ctx.canManage && !ctx.allStructures ? { onEdit: (c) => navigate(`/edit/${c._id}`), onDelete: setToDelete } : undefined;
+    ctx.canManage && !ctx.allStructures
+      ? { onEdit: (c) => (c.recurrence ? setToEdit(c) : navigate(`/edit/${c._id}`)), onDelete: setToDelete }
+      : undefined;
+  const courseLabel = (c: Course) =>
+    `${courseSubject(c, (id) => subjectName.get(id))} — ${new Date(c.startDate.replace(' ', 'T')).toLocaleDateString(i18n.language || 'fr', { weekday: 'long', day: 'numeric', month: 'long' })} ${hhmm(c.startDate)}`;
 
   if (ctx.ready && ctx.structures.length === 0) {
     return (
@@ -428,8 +435,15 @@ export function Timetable() {
       {toDelete && (
         <DeleteCourseDialog
           course={toDelete}
-          label={`${courseSubject(toDelete, (id) => subjectName.get(id))} — ${new Date(toDelete.startDate.replace(' ', 'T')).toLocaleDateString(i18n.language || 'fr', { weekday: 'long', day: 'numeric', month: 'long' })} ${hhmm(toDelete.startDate)}`}
+          label={courseLabel(toDelete)}
           onClose={() => setToDelete(null)}
+        />
+      )}
+      {toEdit && (
+        <EditScopeDialog
+          label={courseLabel(toEdit)}
+          onChoose={(scope) => navigate(scope === 'series' ? `/edit/${toEdit._id}?serie=1` : `/edit/${toEdit._id}`)}
+          onClose={() => setToEdit(null)}
         />
       )}
     </div>

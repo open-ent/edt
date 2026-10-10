@@ -155,6 +155,7 @@ export interface StoredCourse {
   resources?: CourseResource[] | null;
   roomLabels?: string[] | null;
   recurrence?: string | null;
+  everyTwoWeek?: boolean;
 }
 
 /**
