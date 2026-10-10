@@ -7,6 +7,7 @@ import { useEdtContext } from '../hooks/useEdtContext';
 const TABS = [
   { to: '/admin', end: true, label: 'edt.admin.course.tags.title' },
   { to: '/admin/import', end: false, label: 'edt.admin.tab.import' },
+  { to: '/admin/exclusions', end: false, label: 'edt.settings.exclusion.title' },
 ];
 
 /**

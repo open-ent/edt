@@ -301,6 +301,45 @@ export const importSts = async (structureId: string, stsEmp: File, empSts: File)
   return res.ok ? { ok: true, report: body?.report } : { ok: false, error: body?.error };
 };
 
+// ── Exclusions de périodes (périodes fermées, module viescolaire) ──────────────
+/** Période fermée de l'établissement, ex. { description: "Vacances de printemps", start_date: "2027-04-17 00:00:00", … }. */
+export interface Exclusion {
+  id: number;
+  description: string;
+  start_date: string;
+  end_date: string;
+  id_structure?: string;
+}
+
+/** Exclusions de l'établissement, comme Exclusions.sync de l'AngularJS. */
+export const getExclusions = async (structureId: string): Promise<Exclusion[]> =>
+  (await json<Exclusion[]>(await fetch(`/viescolaire/settings/periodes/exclusions?structureId=${structureId}`, base))) ?? [];
+
+/** Création (sans id) ou modification ; dates « YYYY-MM-DD », journées entières comme Exclusion.toJSON. */
+export const saveExclusion = async (structureId: string, ex: { id?: number; description: string; start: string; end: string }): Promise<void> => {
+  const body = { description: ex.description, start_date: `${ex.start} 00:00:00`, end_date: `${ex.end} 23:59:59`, id_structure: structureId };
+  const res = await fetch(ex.id ? `/viescolaire/settings/exclusion/${ex.id}` : '/viescolaire/settings/exclusion', {
+    ...base,
+    method: ex.id ? 'PUT' : 'POST',
+    headers: mutHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(String(res.status));
+};
+
+export const deleteExclusion = async (id: number): Promise<void> => {
+  const res = await fetch(`/viescolaire/settings/exclusion/${id}`, { ...base, method: 'DELETE', headers: mutHeaders() });
+  if (!res.ok) throw new Error(String(res.status));
+};
+
+/** Nombre de cours déjà programmés sur une période (avertissement avant de la fermer). */
+export const countCoursesBetween = async (structureId: string, start: string, end: string): Promise<number> => {
+  const res = await fetch(`/viescolaire/common/courses/${structureId}/${start}/${end}`, base);
+  if (!res.ok) return 0;
+  const body = await res.json().catch(() => []);
+  return Array.isArray(body) ? body.length : 0;
+};
+
 /** Administration des étiquettes de cours, mêmes routes que l'AngularJS (services/courseTag.service.ts). */
 export const createCourseTag = (structureId: string, tag: CourseTagInput) => tagRequest(`/edt/structures/${structureId}/course/tag`, 'POST', tag);
 export const updateCourseTag = (id: number, tag: CourseTagInput) => tagRequest('/edt/course/tag', 'PUT', { ...tag, id });
@@ -535,6 +574,10 @@ export const api = {
   searchGroups,
   getSubjects,
   getCourseTags,
+  getExclusions,
+  saveExclusion,
+  deleteExclusion,
+  countCoursesBetween,
   getStsReports,
   importSts,
   createCourseTag,

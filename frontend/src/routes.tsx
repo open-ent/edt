@@ -1,6 +1,7 @@
 import { RouteObject, createHashRouter } from 'react-router-dom';
 
 import { Admin } from './screens/Admin';
+import { AdminExclusions } from './screens/AdminExclusions';
 import { AdminImport } from './screens/AdminImport';
 import { AdminLabels } from './screens/AdminLabels';
 import { CourseForm } from './screens/CourseForm';
@@ -15,7 +16,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <Timetable /> },
       { path: 'create', element: <CourseForm /> },
       { path: 'edit/:id', element: <CourseForm key="edit" /> },
-      { path: 'admin', element: <Admin />, children: [{ index: true, element: <AdminLabels /> }, { path: 'import', element: <AdminImport /> }] },
+      { path: 'admin', element: <Admin />, children: [{ index: true, element: <AdminLabels /> }, { path: 'import', element: <AdminImport /> }, { path: 'exclusions', element: <AdminExclusions /> }] },
     ],
   },
 ];
