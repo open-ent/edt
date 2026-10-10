@@ -243,9 +243,14 @@ export function Timetable() {
       <div className="d-flex align-items-center justify-content-between mb-16 flex-wrap gap-8">
         <h1 className="m-0">{t('edt.timetable.title')}</h1>
         {ctx.canManage && !ctx.allStructures && (
-          <button type="button" className="btn btn-primary" onClick={() => navigate('/create')}>
-            {t('edt.course.new', { defaultValue: 'Créer un cours' })}
-          </button>
+          <div className="d-flex gap-8">
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/admin')}>
+              {t('edt.admin.title')}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => navigate('/create')}>
+              {t('edt.course.new', { defaultValue: 'Créer un cours' })}
+            </button>
+          </div>
         )}
       </div>
 

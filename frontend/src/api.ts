@@ -256,7 +256,33 @@ export interface CourseTag {
   label: string;
   abbreviation?: string;
   isHidden?: boolean;
+  /** Prioritaire à l'affichage quand deux cours se superposent. */
+  isPrimary?: boolean;
+  /** Un appel (présences) est associé aux cours portant cette étiquette. */
+  allowRegister?: boolean;
+  /** Déjà posée sur des cours : se masque, ne se supprime pas. */
+  isUsed?: boolean;
 }
+
+/** Étiquette saisie dans l'administration, ex. { label: "Sortie", abbreviation: "SOR", isPrimary: false, allowRegister: true }. */
+export interface CourseTagInput {
+  label: string;
+  abbreviation: string;
+  isPrimary: boolean;
+  allowRegister: boolean;
+}
+
+const tagRequest = async (url: string, method: string, body?: unknown): Promise<void> => {
+  const res = await fetch(url, { ...base, method, headers: mutHeaders(), body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!res.ok) throw new Error(String(res.status));
+};
+
+/** Administration des étiquettes de cours, mêmes routes que l'AngularJS (services/courseTag.service.ts). */
+export const createCourseTag = (structureId: string, tag: CourseTagInput) => tagRequest(`/edt/structures/${structureId}/course/tag`, 'POST', tag);
+export const updateCourseTag = (id: number, tag: CourseTagInput) => tagRequest('/edt/course/tag', 'PUT', { ...tag, id });
+export const deleteCourseTag = (structureId: string, id: number) => tagRequest(`/edt/structures/${structureId}/course/tag/${id}`, 'DELETE');
+export const setCourseTagHidden = (structureId: string, id: number, isHidden: boolean) =>
+  tagRequest(`/edt/structures/${structureId}/course/tag/${id}/hidden`, 'PUT', { isHidden });
 
 export const getCourseTags = async (structureId: string): Promise<CourseTag[]> =>
   (await json<CourseTag[]>(await fetch(`/edt/structures/${structureId}/course/tags`, base))) ?? [];
@@ -485,6 +511,10 @@ export const api = {
   searchGroups,
   getSubjects,
   getCourseTags,
+  createCourseTag,
+  updateCourseTag,
+  deleteCourseTag,
+  setCourseTagHidden,
   createCourses,
   getRbsResourceList,
   getRoomCategory,
