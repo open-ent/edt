@@ -6,7 +6,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { api, Group } from '../api';
 import { sortGroups } from '../context';
-import { CourseDraft, draftFromCourse, DraftError, effectiveTimes, emptyDraft, isEditable, prefillTimes, toCoursePayload, validateDraft } from '../courseForm';
+import { CourseDraft, draftFromCourse, DraftError, effectiveTimes, emptyDraft, isEditable, lineTimes, prefillTimes, SeriesError, SeriesLine, seriesDates, seriesPayloads, toCoursePayload, validateDraft, validateSeries } from '../courseForm';
 import { MediacentrePicker } from '../features/MediacentrePicker';
 import { MultiPicker } from '../features/MultiPicker';
 import { addResources, PickedFile, workspaceResource } from '../resources';
@@ -52,6 +52,16 @@ export function CourseForm() {
   const slots = slotsQuery.data ?? [];
   const [draft, setDraft] = useState<CourseDraft>(() => emptyDraft(structureId));
   const [submitted, setSubmitted] = useState(false);
+  // Série (création seulement) : même formulaire, la date devient « Du », un « Au » s'ajoute, et
+  // l'horaire saisi s'ajoute comme créneau (jour + horaire) à la liste des créneaux de la série.
+  const [recurrent, setRecurrent] = useState(false);
+  const [series, setSeries] = useState<{ endDate: string; everyTwoWeek: boolean; lines: SeriesLine[] }>({ endDate: '', everyTwoWeek: false, lines: [] });
+  const [lineDay, setLineDay] = useState('');
+  const schoolYearQuery = useQuery({ queryKey: ['edt', 'school-year', structureId], queryFn: () => api.getSchoolYear(structureId), enabled: !!structureId && recurrent });
+  useEffect(() => {
+    // Fin de série proposée : fin de l'année scolaire, comme l'AngularJS (makeRecurrentCourse).
+    if (recurrent && !series.endDate && schoolYearQuery.data) setSeries((x) => ({ ...x, endDate: schoolYearQuery.data!.end }));
+  }, [recurrent, series.endDate, schoolYearQuery.data]);
   const [initialized, setInitialized] = useState(false);
 
   // Pré-remplissage, une fois le référentiel chargé : enseignants et classes affichés dans l'emploi
@@ -127,17 +137,34 @@ export function CourseForm() {
   const times = effectiveTimes(draft, slots);
   // Ressources déjà prises sur le créneau : l'enregistrement est bloqué tant qu'il en reste une,
   // avec des ressources libres proposées en remplacement (cf. freeAlternatives).
+  const seriesOptions = { startDate: draft.date, endDate: series.endDate, everyTwoWeek: series.everyTwoWeek, lines: series.lines };
+  // Créneaux réels de la série (une entrée par cours), ex. lundis 08:00-10:00 du 12/10 au 26/10.
+  const seriesSlots = useMemo(
+    () =>
+      recurrent
+        ? series.lines.flatMap((l) => {
+            const t = lineTimes(l, slots);
+            return t ? seriesDates(draft.date, series.endDate, l.dayOfWeek, series.everyTwoWeek).map((d) => ({ startAt: `${d}T${t.start}:00`, endAt: `${d}T${t.end}:00` })) : [];
+          })
+        : [],
+    [recurrent, series, slots, draft.date],
+  );
   const busyQuery = useQuery({
-    queryKey: ['edt', 'rbs-busy', structureId, draft.date, times?.start, times?.end, editId],
-    queryFn: () => api.getBusyResourceIds(structureId, `${draft.date}T${times!.start}:00`, `${draft.date}T${times!.end}:00`, editId),
-    enabled: !!structureId && draft.rbsResourceIds.length > 0 && !!draft.date && !!times,
+    queryKey: recurrent ? ['edt', 'rbs-busy-series', structureId, seriesSlots] : ['edt', 'rbs-busy', structureId, draft.date, times?.start, times?.end, editId],
+    queryFn: async () =>
+      recurrent
+        ? api.getBusyResourcesForSlots(structureId, seriesSlots)
+        : { busy: await api.getBusyResourceIds(structureId, `${draft.date}T${times!.start}:00`, `${draft.date}T${times!.end}:00`, editId), dates: {} as Record<string, string[]> },
+    enabled: !!structureId && draft.rbsResourceIds.length > 0 && (recurrent ? seriesSlots.length > 0 : !!draft.date && !!times),
   });
-  const busyIds = busyQuery.data ?? [];
+  const busyIds = busyQuery.data?.busy ?? [];
+  const busyDates = busyQuery.data?.dates ?? {};
   const takenRbs = selectedRbs.filter((r) => busyIds.includes(r.id));
   // Disponibilité pas encore connue pour le créneau choisi : on attend avant d'enregistrer. En cas
   // d'échec de la vérification, on n'empêche pas d'enregistrer : le serveur signale lui-même une
   // ressource qu'il n'a pas pu réserver (rbsConflicts).
-  const availabilityPending = selectedRbs.length > 0 && !!draft.date && !!times && !busyQuery.isError && (busyQuery.isFetching || !busyQuery.data);
+  const availabilityPending =
+    selectedRbs.length > 0 && (recurrent ? seriesSlots.length > 0 : !!draft.date && !!times) && !busyQuery.isError && (busyQuery.isFetching || !busyQuery.data);
 
   const onPickFiles = (result: unknown) => {
     const picked = (Array.isArray(result) ? result : [result]) as PickedFile[];
@@ -148,9 +175,16 @@ export function CourseForm() {
     mediaLibraryRef.current?.hide();
   };
 
-  const errors: Array<DraftError | 'roomBusy'> = [...validateDraft(draft, slots, new Date()), ...(takenRbs.length ? (['roomBusy'] as const) : [])];
+  // Série : les règles d'horaire et de date portent sur les créneaux (validateSeries), pas sur le brouillon.
+  const draftErrors = validateDraft(draft, slots, new Date()).filter((e) => !recurrent || ['teachers', 'groups', 'subject'].includes(e));
+  const errors: Array<DraftError | SeriesError | 'roomBusy'> = [
+    ...draftErrors,
+    ...(recurrent ? validateSeries(seriesOptions, slots, new Date()).filter((e) => !draftErrors.includes(e as DraftError)) : []),
+    ...(takenRbs.length ? (['roomBusy'] as const) : []),
+  ];
   const create = useMutation({
     mutationFn: () => {
+      if (recurrent) return api.createCourses(seriesPayloads(draft, seriesOptions, slots, user?.login ?? '', new Date(), () => crypto.randomUUID()));
       const payload = toCoursePayload(draft, slots, user?.login ?? '', new Date());
       return editId ? api.updateCourse(editId, payload) : api.createCourses([payload]);
     },
@@ -171,8 +205,12 @@ export function CourseForm() {
     if (errors.length === 0 && !availabilityPending && !create.isPending) create.mutate();
   };
 
-  const errorText: Record<DraftError | 'roomBusy', string> = {
+  const errorText: Record<DraftError | SeriesError | 'roomBusy', string> = {
     roomBusy: t('edt.form.error.roomBusy'),
+    lines: t('edt.form.error.series.lines'),
+    period: t('edt.error.date.is.not.a.week.after'),
+    lineTimes: t('edt.form.error.series.lineTimes'),
+    empty: t('edt.form.error.series.empty'),
     teachers: t('edt.form.error.teachers'),
     groups: t('edt.form.error.groups'),
     subject: t('edt.form.error.subject'),
@@ -181,6 +219,16 @@ export function CourseForm() {
     order: t('edt.form.error.order'),
     past: t('edt.form.error.past'),
   };
+  const dayName = (day: number) => new Date(2026, 9, 4 + day).toLocaleDateString('fr', { weekday: 'long' });
+  const addLine = () => {
+    const line: SeriesLine = { dayOfWeek: Number(lineDay), freeSchedule: draft.freeSchedule, startSlotId: draft.startSlotId, endSlotId: draft.endSlotId, startTime: draft.startTime, endTime: draft.endTime };
+    setSeries((x) => ({ ...x, lines: [...x.lines, line] }));
+  };
+  const lineLabel = (l: SeriesLine) => {
+    const t = lineTimes(l, slots);
+    return `${dayName(l.dayOfWeek)} ${t ? `${t.start} – ${t.end}` : ''}`;
+  };
+  const canAddLine = lineDay !== '' && !!lineTimes({ ...series.lines[0], dayOfWeek: 0, freeSchedule: draft.freeSchedule, startSlotId: draft.startSlotId, endSlotId: draft.endSlotId, startTime: draft.startTime, endTime: draft.endTime }, slots);
   const groupOption = (g: Group) => ({
     id: g.id,
     label: g.isInCurrentTeacher ? `${g.name} ${t('edt.timetable.group.mine')}` : g.name,
@@ -263,11 +311,51 @@ export function CourseForm() {
           </div>
         </div>
 
+        {!editId && (
+          <fieldset className="mb-12">
+            <legend className="form-label" style={{ fontWeight: 700, fontSize: 15 }}>{t('edt.type')}</legend>
+            <div className="d-flex gap-16 flex-wrap align-items-center">
+              <label className="d-flex align-items-center gap-4 m-0">
+                <input type="radio" name="edt-course-type" checked={!recurrent} onChange={() => setRecurrent(false)} />
+                {t('edt.type.punctual')}
+              </label>
+              <label className="d-flex align-items-center gap-4 m-0">
+                <input type="radio" name="edt-course-type" checked={recurrent} onChange={() => setRecurrent(true)} />
+                {t('edt.type.recurrent')}
+              </label>
+              {recurrent && (
+                <label className="d-flex align-items-center gap-4 m-0">
+                  <input type="checkbox" checked={series.everyTwoWeek} onChange={(e) => setSeries((x) => ({ ...x, everyTwoWeek: e.target.checked }))} />
+                  {t('edt.every.two.weeks')}
+                </label>
+              )}
+            </div>
+          </fieldset>
+        )}
+
         <div className="d-flex gap-12 flex-wrap align-items-end mb-12">
           <div>
-            <label htmlFor="edt-date" className="form-label" style={{ fontWeight: 700 }}>{t('edt.date')} *</label>
+            <label htmlFor="edt-date" className="form-label" style={{ fontWeight: 700 }}>{t(recurrent ? 'from' : 'edt.date')} *</label>
             <input id="edt-date" type="date" className="form-control" value={draft.date} onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))} />
           </div>
+          {recurrent && (
+            <div>
+              <label htmlFor="edt-end-date" className="form-label" style={{ fontWeight: 700 }}>{t('edt.form.series.to')} *</label>
+              <input id="edt-end-date" type="date" className="form-control" value={series.endDate} onChange={(e) => setSeries((x) => ({ ...x, endDate: e.target.value }))} />
+            </div>
+          )}
+        </div>
+
+        <div className="d-flex gap-12 flex-wrap align-items-end mb-12">
+          {recurrent && (
+            <div>
+              <label htmlFor="edt-line-day" className="form-label" style={{ fontWeight: 700 }}>{t('edt.utils.day')}</label>
+              <select id="edt-line-day" className="form-select" value={lineDay} onChange={(e) => setLineDay(e.target.value)}>
+                <option value="">{t('edt.utils.day.choose')}</option>
+                {[1, 2, 3, 4, 5, 6, 0].map((d) => <option key={d} value={d}>{dayName(d)}</option>)}
+              </select>
+            </div>
+          )}
           {!draft.freeSchedule ? (
             <>
               <div>
@@ -301,7 +389,45 @@ export function CourseForm() {
             <input type="checkbox" checked={draft.freeSchedule} onChange={(e) => setDraft((d) => ({ ...d, freeSchedule: e.target.checked }))} />
             {t('edt.free.schedule.time.choice')}
           </label>
+          {recurrent && (
+            <button type="button" className="btn btn-secondary" disabled={!canAddLine} onClick={addLine}>{t('edt.form.series.add')}</button>
+          )}
         </div>
+
+        {recurrent && (
+          <section className="mb-12" aria-labelledby="edt-series-title">
+            <div id="edt-series-title" role="heading" aria-level={2} style={{ fontSize: 15, fontWeight: 700 }}>{t('edt.form.series.lines')}</div>
+            {series.lines.length === 0 ? (
+              <p className="text-muted m-0" style={{ fontSize: 14 }}>{t('edt.form.series.none')}</p>
+            ) : (
+              <ul className="list-unstyled m-0 d-flex flex-column gap-4" data-series-lines>
+                {series.lines.map((l, i) => (
+                  <li key={i} className="d-flex align-items-center gap-8" style={{ textTransform: 'capitalize' }}>
+                    {lineLabel(l)}
+                    <button
+                      type="button"
+                      className="border-0 bg-transparent p-0"
+                      style={{ color: '#555', fontSize: 16, fontWeight: 700, lineHeight: 1 }}
+                      aria-label={t('edt.timetable.filter.remove', { 0: lineLabel(l) })}
+                      onClick={() => setSeries((x) => ({ ...x, lines: x.lines.filter((_, j) => j !== i) }))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {seriesSlots.length > 0 && (
+              <p className="mt-8 mb-0" role="status" style={{ fontSize: 14 }}>
+                {t('edt.form.series.count', { 0: seriesSlots.length })}{' '}
+                <span className="text-muted">
+                  {seriesSlots.slice(0, 4).map((x) => new Date(x.startAt).toLocaleDateString('fr', { day: '2-digit', month: '2-digit' })).join(', ')}
+                  {seriesSlots.length > 4 ? '…' : ''}
+                </span>
+              </p>
+            )}
+          </section>
+        )}
 
         {rbsResources.length > 0 && (
           <div className="mb-12">
@@ -348,6 +474,13 @@ export function CourseForm() {
                 // display: block : le thème met le contenu d'une .alert en ligne (texte et boutons côte à côte).
                 <div key={taken.id} className="alert alert-danger mt-8 mb-0" role="alert" data-busy-resource={taken.id} style={{ display: 'block' }}>
                   <p className="mb-8">{t('edt.form.room.busy', { 0: resourceLabel(taken) })}</p>
+                  {(busyDates[String(taken.id)] ?? []).length > 0 && recurrent && (
+                    <p className="mb-8">
+                      {t('edt.form.room.busy.dates', {
+                        0: busyDates[String(taken.id)].map((d) => new Date(`${d}T12:00:00`).toLocaleDateString('fr', { day: '2-digit', month: '2-digit' })).join(', '),
+                      })}
+                    </p>
+                  )}
                   <p className="mb-4" style={{ fontWeight: 700 }}>
                     {alternatives.length ? t('edt.form.room.busy.free') : t('edt.form.room.busy.none')}
                   </p>

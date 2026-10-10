@@ -196,3 +196,93 @@ export function isEditable(startDate: string, now: Date): boolean {
   const start = new Date(startDate.replace(' ', 'T')).getTime();
   return !Number.isNaN(start) && start - 15 * 60_000 > now.getTime();
 }
+
+/** Une ligne de série : jour de la semaine (0 = dimanche) et horaire, ex. lundi M1-M2. */
+export interface SeriesLine {
+  dayOfWeek: number;
+  freeSchedule: boolean;
+  startSlotId: string;
+  endSlotId: string;
+  startTime: string;
+  endTime: string;
+}
+
+/** Série de cours : du `startDate` au `endDate` (« YYYY-MM-DD »), toutes les semaines ou une sur deux. */
+export interface SeriesOptions {
+  startDate: string;
+  endDate: string;
+  everyTwoWeek: boolean;
+  lines: SeriesLine[];
+}
+
+const toYmd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * Dates d'une ligne de série : le premier jour demandé à partir du début, puis tous les 7 ou 14
+ * jours jusqu'à la fin incluse. Ex. lundi, du mercredi 07/10 au 26/10, une semaine sur deux →
+ * 12/10, 26/10. (L'AngularJS pouvait sauter la première semaine en « une sur deux ».)
+ */
+export function seriesDates(startDate: string, endDate: string, dayOfWeek: number, everyTwoWeek: boolean): string[] {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+  const first = new Date(start);
+  first.setDate(first.getDate() + ((dayOfWeek - first.getDay() + 7) % 7));
+  const dates: string[] = [];
+  for (const d = first; d <= end; d.setDate(d.getDate() + (everyTwoWeek ? 14 : 7))) dates.push(toYmd(d));
+  return dates;
+}
+
+/** Horaire d'une ligne : plages nommées ou horaire libre, comme effectiveTimes. */
+export function lineTimes(line: SeriesLine, slots: TimeSlot[]): { start: string; end: string } | null {
+  return effectiveTimes({ ...emptyDraft(''), ...line }, slots);
+}
+
+export type SeriesError = 'lines' | 'period' | 'lineTimes' | 'empty' | 'past';
+
+/**
+ * Erreurs bloquantes d'une série, en plus de celles du cours (enseignant, classe, matière) :
+ * au moins une ligne, fin postérieure au début (règle AngularJS), chaque ligne avec un horaire
+ * valide, au moins un cours généré, aucun cours déjà commencé.
+ */
+export function validateSeries(series: SeriesOptions, slots: TimeSlot[], now: Date): SeriesError[] {
+  const errors: SeriesError[] = [];
+  if (series.lines.length === 0) errors.push('lines');
+  if (!series.startDate || !series.endDate || series.endDate <= series.startDate) errors.push('period');
+  if (series.lines.some((l) => {
+    const t = lineTimes(l, slots);
+    return !t || minutesOfHour(t.end) - minutesOfHour(t.start) < (l.freeSchedule ? 15 : 1);
+  })) errors.push('lineTimes');
+  if (errors.length) return errors;
+  const occurrences = series.lines.flatMap((l) => {
+    const t = lineTimes(l, slots)!;
+    return seriesDates(series.startDate, series.endDate, l.dayOfWeek, series.everyTwoWeek).map((d) => `${d}T${t.start}:00`);
+  });
+  if (occurrences.length === 0) errors.push('empty');
+  else if (occurrences.some((s) => new Date(s).getTime() <= now.getTime())) errors.push('past');
+  return errors;
+}
+
+/**
+ * Cours envoyés à POST /edt/course pour une série, comme `getCourseForEachOccurrence()` de
+ * l'AngularJS : un cours par date, une récurrence (identifiant partagé) par ligne, jour de la
+ * semaine de la ligne, everyTwoWeek. Ex. lundi + jeudi, 3 semaines → 6 cours, 2 récurrences.
+ */
+export function seriesPayloads(
+  draft: CourseDraft,
+  series: SeriesOptions,
+  slots: TimeSlot[],
+  login: string,
+  now: Date,
+  newId: () => string,
+): Array<Record<string, unknown>> {
+  return series.lines.flatMap((line) => {
+    const recurrence = newId();
+    return seriesDates(series.startDate, series.endDate, line.dayOfWeek, series.everyTwoWeek).map((date) => ({
+      ...toCoursePayload({ ...draft, ...line, date }, slots, login, now),
+      dayOfWeek: line.dayOfWeek,
+      everyTwoWeek: series.everyTwoWeek,
+      recurrence,
+    }));
+  });
+}

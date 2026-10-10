@@ -310,6 +310,35 @@ export const getBusyResourceIds = async (structureId: string, start: string, end
   return body?.busy ?? [];
 };
 
+/**
+ * Ressources occupées sur plusieurs créneaux d'un coup (série de cours), avec les jours concernés
+ * par ressource. Ex. lundis 12/10 et 19/10, « Salle 201 » (id 12) prise le 19 →
+ * { busy: [12], dates: { "12": ["2026-10-19"] } }.
+ */
+export const getBusyResourcesForSlots = async (
+  structureId: string,
+  slots: Array<{ startAt: string; endAt: string }>,
+  courseId?: string,
+): Promise<{ busy: number[]; dates: Record<string, string[]> }> => {
+  const body = await json<{ busy?: number[]; dates?: Record<string, string[]> }>(
+    await fetch(`/edt/structures/${structureId}/rbs/availability`, {
+      ...base,
+      method: 'POST',
+      headers: mutHeaders(),
+      body: JSON.stringify({ slots, course: courseId }),
+    }),
+  );
+  return { busy: body?.busy ?? [], dates: body?.dates ?? {} };
+};
+
+/** Année scolaire de l'établissement (vie scolaire), ex. { start: "2026-09-01", end: "2027-07-04" } ; null si non paramétrée. */
+export const getSchoolYear = async (structureId: string): Promise<{ start: string; end: string } | null> => {
+  const res = await fetch(`/viescolaire/settings/periode/schoolyear?structureId=${structureId}`, base);
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { id?: number; start_date?: string; end_date?: string } | null;
+  return body?.id !== undefined && body.start_date && body.end_date ? { start: body.start_date.slice(0, 10), end: body.end_date.slice(0, 10) } : null;
+};
+
 // ── Médiacentre (documents attachés au cours) ──────────────────────────────────
 /** Sources interrogées, comme l'IHM AngularJS : GAR, Signet, Moodle, PMB. */
 const MEDIACENTRE_SOURCES = [
@@ -440,6 +469,8 @@ export const api = {
   getRbsResourceList,
   getRoomCategory,
   getBusyResourceIds,
+  getBusyResourcesForSlots,
+  getSchoolYear,
   searchMediacentre,
   getCourse,
   updateCourse,

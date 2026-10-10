@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Group, TimeSlot } from './api';
-import { CourseDraft, draftFromCourse, effectiveTimes, emptyDraft, isEditable, prefillTimes, toCoursePayload, validateDraft } from './courseForm';
+import { CourseDraft, draftFromCourse, effectiveTimes, emptyDraft, isEditable, prefillTimes, SeriesLine, seriesDates, seriesPayloads, toCoursePayload, validateDraft, validateSeries } from './courseForm';
 
 const slots: TimeSlot[] = [
   { id: 'M1', name: 'M1', startHour: '08:00', endHour: '09:00' },
@@ -127,5 +127,37 @@ describe('reprise d’un cours existant', () => {
   it('modifiable jusqu’à 15 minutes avant le début', () => {
     expect(isEditable('2026-10-09T12:20:00', NOW)).toBe(true);
     expect(isEditable('2026-10-09T12:10:00', NOW)).toBe(false);
+  });
+});
+
+describe('séries (cours récurrents)', () => {
+  const line = (dayOfWeek: number, extra: Partial<SeriesLine> = {}): SeriesLine => ({ dayOfWeek, freeSchedule: false, startSlotId: 'M1', endSlotId: 'M2', startTime: '', endTime: '', ...extra });
+
+  it('dates : premier jour demandé à partir du début, puis chaque semaine ou une sur deux', () => {
+    expect(seriesDates('2026-10-07', '2026-10-26', 1, false)).toEqual(['2026-10-12', '2026-10-19', '2026-10-26']);
+    expect(seriesDates('2026-10-07', '2026-10-26', 1, true)).toEqual(['2026-10-12', '2026-10-26']);
+    expect(seriesDates('2026-10-12', '2026-10-12', 1, false)).toEqual(['2026-10-12']);
+  });
+
+  it('un cours par date, une récurrence par ligne', () => {
+    let n = 0;
+    const p = seriesPayloads(valid, { startDate: '2026-10-12', endDate: '2026-10-25', everyTwoWeek: false, lines: [line(1), line(4, { freeSchedule: true, startTime: '14:00', endTime: '15:30' })] }, slots, 'x', NOW, () => `r${++n}`);
+    expect(p.map((c) => [c.startDate, c.recurrence, c.dayOfWeek])).toEqual([
+      ['2026-10-12T08:00:00', 'r1', 1],
+      ['2026-10-19T08:00:00', 'r1', 1],
+      ['2026-10-15T14:00:00', 'r2', 4],
+      ['2026-10-22T14:00:00', 'r2', 4],
+    ]);
+    expect(p[2]).toMatchObject({ endDate: '2026-10-15T15:30:00', idStartSlot: undefined, everyTwoWeek: false, classes: ['4A'] });
+  });
+
+  it('validations : lignes, période, horaires, cours déjà commencé', () => {
+    const base = { startDate: '2026-10-12', endDate: '2026-10-25', everyTwoWeek: false, lines: [line(1)] };
+    expect(validateSeries(base, slots, NOW)).toEqual([]);
+    expect(validateSeries({ ...base, lines: [] }, slots, NOW)).toEqual(['lines']);
+    expect(validateSeries({ ...base, endDate: '2026-10-12' }, slots, NOW)).toEqual(['period']);
+    expect(validateSeries({ ...base, lines: [line(1, { freeSchedule: true, startTime: '10:00', endTime: '10:10' })] }, slots, NOW)).toEqual(['lineTimes']);
+    expect(validateSeries({ ...base, startDate: '2026-10-05' }, slots, NOW)).toEqual(['past']);
+    expect(validateSeries({ ...base, endDate: '2026-10-13', lines: [line(3)] }, slots, NOW)).toEqual(['empty']);
   });
 });
