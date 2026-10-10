@@ -2,6 +2,11 @@ package fr.cgi.edt.controllers;
 
 
 import fr.cgi.edt.security.EdtAccessIfMyStructure;
+import java.util.List;
+import java.util.ArrayList;
+import fr.wseduc.mongodb.MongoDb;
+import fr.cgi.edt.services.impl.RbsBridgeService;
+import fr.cgi.edt.Edt;
 import fr.cgi.edt.services.CourseService;
 import fr.cgi.edt.services.impl.DefaultCourseService;
 import fr.wseduc.rs.*;
@@ -105,6 +110,53 @@ public class CourseController extends ControllerHelper {
                     renderJson(request, matching);
                 })
                 .onFailure(err -> badRequest(request));
+    }
+
+    @Get("/structures/:structureId/rbs/availability/:startAt/:endAt")
+    @ApiDoc("Ressources RBS occupées sur un créneau (réservations et autres cours), pour bloquer une salle prise et proposer les libres. ?course=<id> : cours modifié, dont les propres réservations ne comptent pas.")
+    @SecuredAction(value = "", type = ActionType.RESOURCE)
+    @ResourceFilter(EdtAccessIfMyStructure.class)
+    public void getRbsAvailability(final HttpServerRequest request) {
+        final String structureId = request.getParam("structureId");
+        final String startAt = request.getParam("startAt");
+        final String endAt = request.getParam("endAt");
+        final String courseId = request.params().get("course");
+        final Date requestedStart = parseIsoDateTime(startAt);
+        final Date requestedEnd = parseIsoDateTime(endAt);
+        if (requestedStart == null || requestedEnd == null) {
+            badRequest(request);
+            return;
+        }
+
+        // Réservations du cours modifié (rattachées ou posées par l'import des salles) : les siennes
+        // ne le rendent pas « occupé ».
+        Promise<JsonArray> ownBookings = Promise.promise();
+        if (courseId == null || courseId.isEmpty()) ownBookings.complete(new JsonArray());
+        else MongoDb.getInstance().findOne(Edt.EDT_COLLECTION, new JsonObject().put("_id", courseId), msg -> {
+            JsonObject course = "ok".equals(msg.body().getString("status")) ? msg.body().getJsonObject("result") : null;
+            if (course == null) ownBookings.complete(new JsonArray());
+            else RbsBridgeService.ownBookingIds(eb, course).onComplete(ar -> ownBookings.complete(ar.succeeded() ? ar.result() : new JsonArray()));
+        });
+
+        RbsBridgeService.listResourcesForStructure(eb, structureId).compose(list -> {
+            JsonArray resources = list.getJsonArray("resources", new JsonArray());
+            JsonArray ids = new JsonArray();
+            resources.forEach(r -> ids.add(((JsonObject) r).getInteger("id")));
+            Future<JsonArray> bookings = RbsBridgeService.blockingBookings(eb, ids, startAt, endAt);
+            Future<JsonArray> courses = courseService.getCourses(structureId, startAt.substring(0, 10), endAt.substring(0, 10),
+                    new JsonArray(), new JsonArray(), new JsonArray(), new JsonArray(), null, null, true, false, null);
+            return Future.all(bookings, courses, ownBookings.future()).map(all -> {
+                List<String> labels = new ArrayList<>();
+                for (Object o : courses.result()) {
+                    JsonObject c = (JsonObject) o;
+                    if (Objects.equals(c.getString("_id"), courseId) || !overlaps(c, requestedStart, requestedEnd)) continue;
+                    c.getJsonArray("roomLabels", new JsonArray()).forEach(l -> { if (l != null) labels.add(String.valueOf(l)); });
+                }
+                return RbsBridgeService.busyResourceIds(resources, bookings.result(), ownBookings.future().result(), labels);
+            });
+        })
+        .onSuccess(busy -> renderJson(request, new JsonObject().put("busy", busy)))
+        .onFailure(err -> renderError(request));
     }
 
     private static Date parseIsoDateTime(String value) {

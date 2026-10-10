@@ -80,3 +80,30 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 /** Ex. « LABO_SVT » → « laboratoire de sciences de la vie et de la Terre » ; code inconnu « SALLE_POLYVALENTE » → « salle polyvalente ». */
 export const categoryLabel = (code: string): string => CATEGORY_LABELS[code] ?? code.toLowerCase().replace(/_/g, ' ');
+
+/**
+ * Remplaçants proposés pour une ressource déjà prise : ressources libres sur le créneau et pas
+ * encore choisies, du même type d'abord, puis de la même catégorie, puis les autres (au plus
+ * `limit`). Ex. « Gymnase A » pris → « Gymnase B » avant « Salle 201 ».
+ */
+export function freeAlternatives(taken: RbsResource, all: RbsResource[], busyIds: number[], selectedIds: number[], limit = 5): RbsResource[] {
+  const rank = (r: RbsResource) =>
+    r.typeName && r.typeName === taken.typeName ? 0 : r.typeCategory && r.typeCategory === taken.typeCategory ? 1 : 2;
+  return all
+    .filter((r) => !busyIds.includes(r.id) && !selectedIds.includes(r.id))
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i)
+    .slice(0, limit)
+    .map(({ r }) => r);
+}
+
+/**
+ * Ressources correspondant aux salles « texte » d'un cours qui n'a jamais été lié à une
+ * ressource (ex. cours importé ou généré par school-planner) : même corrélation par nom exact,
+ * sans tenir compte de la casse ni des espaces, que l'AngularJS (loadRbsResources) et que la
+ * détection de conflit serveur. Ex. roomLabels ["Amphithéâtre4"] → [ressource « Amphithéâtre4 »].
+ */
+export function resourcesFromRoomLabels(roomLabels: string[], resources: RbsResource[]): number[] {
+  const wanted = roomLabels.map((l) => (l || '').trim().toLowerCase()).filter(Boolean);
+  return resources.filter((r) => wanted.includes(r.name.trim().toLowerCase())).map((r) => r.id);
+}

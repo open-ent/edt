@@ -249,32 +249,25 @@ public class EdtServiceMongoImpl extends MongoDbCrudService implements EdtServic
     }
 
     /**
-     * Supprime les cours ciblés et renvoie, sous rbsBookingIds, les réservations RBS qu'ils
-     * portaient, pour que l'appelant les libère (sinon la salle reste réservée pour rien).
-     * Ex. série du lundi, 3 occurrences à venir réservant la salle 201 → {"rbsBookingIds":[41,42,43]}.
+     * Supprime les cours ciblés et renvoie, sous « courses », les cours supprimés : l'appelant en
+     * libère les réservations RBS (rattachées ou posées par l'import des salles, cf.
+     * RbsBridgeService.ownBookingIds), sinon la salle reste réservée pour rien.
+     * Ex. série du lundi, 3 occurrences à venir en salle 201 → {"courses": [3 cours]}.
      */
     private void deleteWithBookings(JsonObject matcher, Handler<Either<String, JsonObject>> handler) {
         MongoDb.getInstance().find(this.collection, matcher, found -> {
-            JsonArray bookingIds = "ok".equals(found.body().getString("status"))
-                    ? collectBookingIds(found.body().getJsonArray("results", new JsonArray()))
+            JsonArray courses = "ok".equals(found.body().getString("status"))
+                    ? found.body().getJsonArray("results", new JsonArray())
                     : new JsonArray();
             MongoDb.getInstance().delete(this.collection, matcher, MongoDbResult.validResultHandler(result -> {
-                if (result.isRight()) result.right().getValue().put(Field.RBS_BOOKING_IDS, bookingIds);
+                if (result.isRight()) result.right().getValue().put(DELETED_COURSES, courses);
                 handler.handle(result);
             }));
         });
     }
 
-    /** Réservations RBS de plusieurs cours, sans doublon. Ex. [{rbsBookingIds:[1,2]},{rbsBookingIds:[2]},{}] → [1,2]. */
-    static JsonArray collectBookingIds(JsonArray courses) {
-        JsonArray ids = new JsonArray();
-        for (int i = 0; i < courses.size(); i++) {
-            JsonArray own = courses.getJsonObject(i).getJsonArray(Field.RBS_BOOKING_IDS);
-            if (own == null) continue;
-            for (Object bookingId : own) if (bookingId != null && !ids.contains(bookingId)) ids.add(bookingId);
-        }
-        return ids;
-    }
+    /** Clé de la réponse de suppression portant les cours supprimés (retirée avant de répondre). */
+    public static final String DELETED_COURSES = "courses";
 
     private JsonObject matcherFutureRecurrence(String id) {
         return new JsonObject()

@@ -239,10 +239,26 @@
                     <div class="warning" ng-if="rbsRoomCategoryWarning()">
                         [[rbsRoomCategoryWarning()]]
                     </div>
-                    <!--Avertissement non bloquant : la salle choisie est déjà occupée par un
-                        autre cours sur ce créneau. N'empêche jamais l'enregistrement.-->
-                    <div class="warning" ng-if="rbsRoomConflictWarning">
-                        [[rbsRoomConflictWarning]]
+                    <!--Ressource déjà prise sur le créneau : BLOQUANT (bouton d'enregistrement
+                        désactivé, cf. isValidForm), avec les ressources libres proposées en
+                        remplacement, comme l'interface React.-->
+                    <div class="warning rbs-busy-room" ng-repeat="busy in rbsBusyRooms" data-busy-resource="[[busy.room.id]]">
+                        <p>[[rbsResourceLabel(busy.room.id)]] [[translate('edt.form.room.busy.short')]]</p>
+                        <p ng-if="busy.alternatives.length"><strong><i18n>edt.form.room.busy.free</i18n></strong></p>
+                        <p ng-if="!busy.alternatives.length"><i18n>edt.form.room.busy.none</i18n></p>
+                        <!--Boutons rangés dans le bloc (flottants, ils débordaient du cadre).-->
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            <button type="button" ng-repeat="alt in busy.alternatives"
+                                    ng-click="replaceRbsResource(busy.room.id, alt.id)">
+                                [[translate('edt.form.room.take')]] [[rbsResourceLabel(alt.id)]]
+                            </button>
+                            <button type="button" class="cancel" ng-click="removeRbsResource(busy.room.id)">
+                                [[translate('edt.form.room.remove')]] [[busy.room.name]]
+                            </button>
+                            <button type="button" class="cancel" ng-if="isAnUpdate" ng-click="cancelCreation()">
+                                <i18n>edt.form.edit.cancel</i18n>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

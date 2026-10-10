@@ -316,55 +316,67 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
             };
         };
 
-        $scope.rbsRoomConflictWarning = '';
+        /**
+         * Remplaçants proposés pour une ressource déjà prise, comme l'interface React
+         * (frontend/src/rbs.ts, freeAlternatives) : libres sur le créneau et pas encore choisies,
+         * du même type d'abord, puis de la même catégorie, puis les autres (5 au plus).
+         * Ex. « Gymnase A » pris → « Gymnase B » avant « Salle 201 ».
+         */
+        const freeAlternatives = (taken: any, busyIds: number[]): any[] => {
+            const rank = (r: any): number => r.typeName && r.typeName === taken.typeName ? 0
+                : r.typeCategory && r.typeCategory === taken.typeCategory ? 1 : 2;
+            const selected: number[] = $scope.course.rbsResourceIds || [];
+            return ($scope.sortedRbsResources || $scope.rbsResources || [])
+                .filter((r: any) => busyIds.indexOf(r.id) === -1 && selected.indexOf(r.id) === -1)
+                .map((r: any, i: number) => ({r, i}))
+                .sort((a: any, b: any) => rank(a.r) - rank(b.r) || a.i - b.i)
+                .slice(0, 5)
+                .map((x: any) => x.r);
+        };
+
+        // Ressources choisies déjà prises sur le créneau, avec leurs remplaçants libres : bloquent
+        // l'enregistrement (isValidForm), comme dans l'interface React. Une seule requête pour tout
+        // l'établissement (réservations + salles des autres cours, hors ce cours et ses réservations).
+        $scope.rbsBusyRooms = [];
+        $scope.rbsAvailabilityPending = false;
+        let availabilityRequest: number = 0;
         const checkRoomAvailability = async (): Promise<void> => {
-            $scope.rbsRoomConflictWarning = '';
+            $scope.rbsBusyRooms = [];
+            $scope.rbsAvailabilityPending = false;
             if (!$scope.structure || !$scope.structure.id) { return; }
             if (!$scope.course.rbsResourceIds || !$scope.course.rbsResourceIds.length) { return; }
             const occurrence = effectiveOccurrence();
             if (!occurrence) { return; }
 
-            const rooms: any[] = $scope.course.rbsResourceIds
-                .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
-                .filter((r: any) => !!r);
-            if (!rooms.length) { return; }
-
-            const ownBookingIds: number[] = ($scope.course.rbsBookingIds || []) as number[];
             const start: string = moment(occurrence.start).format('YYYY-MM-DDTHH:mm:ss');
             const end: string = moment(occurrence.end).format('YYYY-MM-DDTHH:mm:ss');
-            const conflictingRooms: string[] = [];
-            for (const room of rooms) {
-                let conflict: boolean = false;
-                try {
-                    // Paramètre encodé à la main : le pont http d'entcore-toolkit ne garantit pas
-                    // l'option `params` d'axios. Ex. « Salle 201 » → ?room=Salle%20201.
-                    const {data}: any = await http.get(
-                        `/edt/structures/${$scope.structure.id}/room-conflicts/${start}/${end}`
-                        + `?room=${encodeURIComponent(room.name)}`
-                    );
-                    conflict = conflict || (data || []).some((c: any) => c._id !== $scope.course._id);
-                } catch (e) {
-                    // Avertissement non bloquant : silence total en cas d'échec de l'appel.
-                }
-                try {
-                    const {data}: any = await http.get(
-                        `/rbs/resource/${room.id}/booking-conflicts/${start}/${end}`);
-                    // Réservation « mère » d'une série périodique ignorée : elle couvre toute
-                    // l'année et n'occupe que ses jours (ex. « jeudi 16:00-17:00 » ne rend pas la
-                    // salle occupée un lundi) ; seules ses occurrences comptent.
-                    conflict = conflict || (data || []).some((b: any) =>
-                        ownBookingIds.indexOf(b.id) === -1 && !(b.is_periodic && !b.parent_booking_id));
-                } catch (e) {
-                    // Avertissement non bloquant : silence total en cas d'échec de l'appel.
-                }
-                if (conflict) { conflictingRooms.push(room.name); }
+            const request: number = ++availabilityRequest;
+            $scope.rbsAvailabilityPending = true;
+            let busyIds: number[] = [];
+            try {
+                const course: string = $scope.course._id ? `?course=${encodeURIComponent($scope.course._id)}` : '';
+                const {data}: any = await http.get(`/edt/structures/${$scope.structure.id}/rbs/availability/${start}/${end}${course}`);
+                busyIds = (data && data.busy) || [];
+            } catch (e) {
+                // Vérification impossible : on n'empêche pas d'enregistrer, le serveur signalera
+                // lui-même une ressource qu'il n'a pas pu réserver (rbsConflicts).
             }
-            if (conflictingRooms.length) {
-                $scope.rbsRoomConflictWarning = conflictingRooms.join(', ') + ' '
-                    + lang.translate('edt.rbs.room.conflict.detected');
-            }
+            if (request !== availabilityRequest) { return; } // réponse d'un créneau déjà changé
+            $scope.rbsAvailabilityPending = false;
+            $scope.rbsBusyRooms = $scope.course.rbsResourceIds
+                .filter((id: number) => busyIds.indexOf(id) !== -1)
+                .map((id: number) => $scope.rbsResources.find((r: any) => r.id === id))
+                .filter((r: any) => !!r)
+                .map((room: any) => ({room, alternatives: freeAlternatives(room, busyIds)}));
             Utils.safeApply($scope);
         };
+
+        /** Remplace une ressource prise par une ressource libre proposée. */
+        $scope.replaceRbsResource = (takenId: number, freeId: number): void => {
+            $scope.course.rbsResourceIds = $scope.course.rbsResourceIds.map((id: number) => id === takenId ? freeId : id);
+            checkRoomAvailability();
+        };
+
         $scope.$watchGroup(
             [
                 'course.rbsResourceIds.length',
@@ -967,7 +979,10 @@ export let manageCourseCtrl = ng.controller('manageCourseCtrl',
                     )
                     || !$scope.course.is_recurrent
                 )
-                && $scope.isPastDate();
+                && $scope.isPastDate()
+                // Ressource prise sur le créneau, ou disponibilité pas encore connue : bloquant.
+                && !$scope.rbsAvailabilityPending
+                && !($scope.rbsBusyRooms && $scope.rbsBusyRooms.length);
         };
 
         const areSetDates = (): boolean => {

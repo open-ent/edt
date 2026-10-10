@@ -48,6 +48,7 @@ import org.entcore.common.user.UserUtils;
 import org.vertx.java.core.http.RouteMatcher;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -238,14 +239,17 @@ public class EdtController extends MongoDbControllerHelper {
                 MongoDb.getInstance().find(fr.cgi.edt.Edt.EDT_COLLECTION,
                     new JsonObject().put(Field._ID, new JsonObject().put("$in", courseIds)),
                     oldCoursesMsg -> {
-                        JsonArray oldBookingIds = new JsonArray();
+                        // Réservations des cours avant modification : rattachées, ou posées par
+                        // l'import des salles (ex. « Amphithéâtre4 — vendredi 08:00-09:00 ») —
+                        // remplacées par des réservations rattachées au cours, au nouveau créneau.
+                        List<Future<JsonArray>> owned = new ArrayList<>();
                         if ("ok".equals(oldCoursesMsg.body().getString("status"))) {
                             JsonArray oldCourses = oldCoursesMsg.body().getJsonArray("results", new JsonArray());
-                            for (int i = 0; i < oldCourses.size(); i++) {
-                                JsonArray ids = oldCourses.getJsonObject(i).getJsonArray(Field.RBS_BOOKING_IDS);
-                                if (ids != null) oldBookingIds.addAll(ids);
-                            }
+                            for (int i = 0; i < oldCourses.size(); i++) owned.add(RbsBridgeService.ownBookingIds(eb, oldCourses.getJsonObject(i)));
                         }
+                        Future.all(owned).onComplete(ownedDone -> {
+                        JsonArray oldBookingIds = new JsonArray();
+                        owned.forEach(f -> { if (f.succeeded()) f.result().forEach(id -> { if (!oldBookingIds.contains(id)) oldBookingIds.add(id); }); });
 
                         edtService.update(body, result -> {
                             if (result.isRight()) {
@@ -268,6 +272,7 @@ public class EdtController extends MongoDbControllerHelper {
                             } else {
                                 renderError(request);
                             }
+                        });
                         });
                     });
             })
@@ -527,9 +532,15 @@ public class EdtController extends MongoDbControllerHelper {
     private Handler<Either<String, JsonObject>> releaseBookingsThen(HttpServerRequest request, UserInfos user) {
         return result -> {
             if (result.isRight()) {
-                JsonArray bookingIds = (JsonArray) result.right().getValue().remove(Field.RBS_BOOKING_IDS);
-                if (bookingIds != null && !bookingIds.isEmpty())
-                    RbsBridgeService.deleteBookings(eb, bookingIds, user != null ? user.getUserId() : null);
+                JsonArray deleted = (JsonArray) result.right().getValue().remove(EdtServiceMongoImpl.DELETED_COURSES);
+                List<Future<JsonArray>> owned = new ArrayList<>();
+                if (deleted != null) deleted.forEach(c -> owned.add(RbsBridgeService.ownBookingIds(eb, (JsonObject) c)));
+                Future.all(owned).onComplete(done -> {
+                    JsonArray bookingIds = new JsonArray();
+                    owned.forEach(f -> { if (f.succeeded()) f.result().forEach(id -> { if (!bookingIds.contains(id)) bookingIds.add(id); }); });
+                    if (!bookingIds.isEmpty())
+                        RbsBridgeService.deleteBookings(eb, bookingIds, user != null ? user.getUserId() : null);
+                });
             }
             defaultResponseHandler(request).handle(result);
         };

@@ -21,8 +21,10 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -268,6 +270,123 @@ public class RbsBridgeService {
         });
 
         return promise.future();
+    }
+
+    /**
+     * Réservations RBS qui occupent réellement les ressources données sur un créneau (heure de
+     * Paris), en un seul appel. Ex. ([12, 15], "2026-11-16T10:00:00", "2026-11-16T11:00:00")
+     * → [{id: 4093, resource_id: 12}].
+     */
+    public static Future<JsonArray> blockingBookings(EventBus eb, JsonArray resourceIds, String startAt, String endAt) {
+        Promise<JsonArray> promise = Promise.promise();
+        if (eb == null || resourceIds == null || resourceIds.isEmpty()) {
+            promise.complete(new JsonArray());
+            return promise.future();
+        }
+        JsonObject msg = new JsonObject()
+                .put("action",      "busy-resources")
+                .put("resourceIds", resourceIds)
+                .put("startAt",     startAt)
+                .put("endAt",       endAt);
+        eb.request(RBS_BUS, msg, (AsyncResult<Message<Object>> reply) -> {
+            if (reply.failed()) {
+                log.error("[EDT@RbsBridgeService] RBS busy-resources error: " + reply.cause().getMessage());
+                promise.fail(reply.cause());
+                return;
+            }
+            promise.complete(extractCreatedBookings((JsonObject) reply.result().body()));
+        });
+        return promise.future();
+    }
+
+    /**
+     * Ressources occupées sur un créneau : réservées (hors réservations du cours lui-même) ou
+     * portées par un autre cours de l'emploi du temps sous le même nom de salle.
+     * Ex. ressources {12: "Salle 201", 15: "Salle 105"}, réservation 4093 sur 12, cours voisin en
+     * « Salle 105 » → [12, 15] ; si 4093 est la réservation du cours modifié → [15].
+     *
+     * @param resources     ressources RBS de l'établissement [{id, name}]
+     * @param bookings      réservations bloquantes [{id, resource_id}]
+     * @param ownBookingIds réservations du cours modifié (ne comptent pas)
+     * @param roomLabels    noms de salle des autres cours qui chevauchent le créneau
+     */
+    public static JsonArray busyResourceIds(JsonArray resources, JsonArray bookings, JsonArray ownBookingIds, List<String> roomLabels) {
+        Set<Integer> busy = new LinkedHashSet<>();
+        for (Object o : bookings) {
+            JsonObject b = (JsonObject) o;
+            if (!ownBookingIds.contains(b.getInteger("id")) && b.getInteger("resource_id") != null) busy.add(b.getInteger("resource_id"));
+        }
+        for (Object o : resources) {
+            JsonObject r = (JsonObject) o;
+            String name = r.getString("name", "").trim();
+            if (!name.isEmpty() && roomLabels.stream().anyMatch(label -> name.equalsIgnoreCase(label.trim()))) busy.add(r.getInteger("id"));
+        }
+        return new JsonArray(new ArrayList<>(busy));
+    }
+
+    /**
+     * Réservations posées par l'import des salles de l'emploi du temps dans RBS (une réservation
+     * périodique par créneau hebdomadaire, ex. « Amphithéâtre4 — vendredi 08:00-09:00 ») qui
+     * correspondent à ce cours sans lui être rattachées : salle du même nom (sans casse ni
+     * espaces) et mêmes début et fin exacts que le cours enregistré.
+     * Ex. cours 401 du 16/10 08:00-09:00 en « Amphithéâtre4 » + occurrence 3467 du même créneau → [3467].
+     *
+     * @param course    cours enregistré (startDate, endDate, roomLabels)
+     * @param resources ressources RBS de l'établissement [{id, name}]
+     * @param bookings  réservations bloquantes [{id, resource_id, start_local, end_local}]
+     */
+    public static JsonArray importedOwnBookings(JsonObject course, JsonArray resources, JsonArray bookings) {
+        List<String> labels = new ArrayList<>();
+        course.getJsonArray("roomLabels", new JsonArray()).forEach(l -> { if (l != null && !String.valueOf(l).trim().isEmpty()) labels.add(String.valueOf(l).trim().toLowerCase()); });
+        String start = localDateTime(course.getString(Field.STARTDATE));
+        String end = localDateTime(course.getString(Field.ENDDATE));
+        JsonArray ids = new JsonArray();
+        if (labels.isEmpty() || start == null || end == null) return ids;
+        Set<Integer> rooms = new LinkedHashSet<>();
+        for (Object o : resources) {
+            JsonObject r = (JsonObject) o;
+            if (labels.contains(r.getString("name", "").trim().toLowerCase())) rooms.add(r.getInteger("id"));
+        }
+        for (Object o : bookings) {
+            JsonObject b = (JsonObject) o;
+            if (rooms.contains(b.getInteger("resource_id")) && start.equals(b.getString("start_local")) && end.equals(b.getString("end_local"))) ids.add(b.getInteger("id"));
+        }
+        return ids;
+    }
+
+    /** « 2026-10-16 08:00:00 » ou « 2026-10-16T08:00:00.000 » → « 2026-10-16T08:00:00 ». */
+    private static String localDateTime(String value) {
+        if (value == null || value.length() < 19) return null;
+        return value.substring(0, 19).replace(' ', 'T');
+    }
+
+    /**
+     * Toutes les réservations d'un cours : celles qui lui sont rattachées (rbsBookingIds) et celles
+     * posées par l'import des salles qui lui correspondent (cf. importedOwnBookings). Ce sont elles
+     * qui ne le rendent pas « occupé », qu'on remplace à la modification et qu'on libère à la
+     * suppression. Ex. cours importé sans rbsBookingIds en « Amphithéâtre4 » → [3467].
+     */
+    public static Future<JsonArray> ownBookingIds(EventBus eb, JsonObject course) {
+        JsonArray linked = course.getJsonArray(Field.RBS_BOOKING_IDS, new JsonArray()).copy();
+        String start = localDateTime(course.getString(Field.STARTDATE));
+        String end = localDateTime(course.getString(Field.ENDDATE));
+        if (course.getJsonArray("roomLabels", new JsonArray()).isEmpty() || start == null || end == null
+                || course.getString("structureId") == null) {
+            return Future.succeededFuture(linked);
+        }
+        return listResourcesForStructure(eb, course.getString("structureId")).compose(list -> {
+            JsonArray resources = list.getJsonArray("resources", new JsonArray());
+            // Seules les ressources portant le nom d'une salle du cours sont interrogées.
+            List<String> labels = new ArrayList<>();
+            course.getJsonArray("roomLabels").forEach(l -> { if (l != null) labels.add(String.valueOf(l).trim().toLowerCase()); });
+            JsonArray ids = new JsonArray();
+            resources.forEach(r -> { if (labels.contains(((JsonObject) r).getString("name", "").trim().toLowerCase())) ids.add(((JsonObject) r).getInteger("id")); });
+            if (ids.isEmpty()) return Future.succeededFuture(linked);
+            return blockingBookings(eb, ids, start, end).map(bookings -> {
+                for (Object id : importedOwnBookings(course, resources, bookings)) if (!linked.contains(id)) linked.add(id);
+                return linked;
+            });
+        }).recover(err -> Future.succeededFuture(linked));
     }
 
     private static JsonArray extractCreatedBookings(JsonObject busReply) {

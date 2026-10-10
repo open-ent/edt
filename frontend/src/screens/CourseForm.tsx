@@ -10,7 +10,7 @@ import { CourseDraft, draftFromCourse, DraftError, effectiveTimes, emptyDraft, i
 import { MediacentrePicker } from '../features/MediacentrePicker';
 import { MultiPicker } from '../features/MultiPicker';
 import { addResources, PickedFile, workspaceResource } from '../resources';
-import { categoryLabel, localRequiredCategory, mismatchedResources, resourceLabel, sortForCategory } from '../rbs';
+import { categoryLabel, freeAlternatives, localRequiredCategory, mismatchedResources, resourceLabel, resourcesFromRoomLabels, sortForCategory } from '../rbs';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { useTimetableState } from '../hooks/useTimetableState';
 import { ymd } from '../utils';
@@ -111,26 +111,33 @@ export function CourseForm() {
   // Repli sur l'heuristique locale si school-planner ne répond pas ou ne connaît pas la matière.
   const requiredCategory = !subject || draft.isExceptional ? null : categoryQuery.data ?? localRequiredCategory(subject.subjectLabel);
   const sortedRbs = useMemo(() => sortForCategory(rbsResources, requiredCategory), [rbsResources, requiredCategory]);
+  // Cours jamais lié à une ressource mais portant une salle « texte » (ex. « Amphithéâtre4 », cours
+  // importé) : la ressource du même nom est présélectionnée à l'ouverture, comme dans l'AngularJS.
+  // Une seule fois, à l'initialisation : retirer ensuite la ressource reste possible.
+  const [labelsMatched, setLabelsMatched] = useState(false);
+  useEffect(() => {
+    if (!editId || !initialized || labelsMatched || !stored || !rbsQuery.data) return;
+    setLabelsMatched(true);
+    if ((stored.rbsResourceIds ?? []).length > 0) return;
+    const ids = resourcesFromRoomLabels(stored.roomLabels ?? [], rbsQuery.data);
+    if (ids.length) setDraft((d) => (d.rbsResourceIds.length ? d : { ...d, rbsResourceIds: ids }));
+  }, [editId, initialized, labelsMatched, stored, rbsQuery.data]);
   const selectedRbs = rbsResources.filter((r) => draft.rbsResourceIds.includes(r.id));
   const mismatched = mismatchedResources(selectedRbs, requiredCategory);
   const times = effectiveTimes(draft, slots);
+  // Ressources déjà prises sur le créneau : l'enregistrement est bloqué tant qu'il en reste une,
+  // avec des ressources libres proposées en remplacement (cf. freeAlternatives).
   const busyQuery = useQuery({
-    queryKey: ['edt', 'rbs-busy', structureId, draft.rbsResourceIds, draft.date, times?.start, times?.end, editId],
-    queryFn: async () => {
-      const busy = await Promise.all(
-        selectedRbs.map(async (r) => ((await api.isResourceBusy(structureId, r, `${draft.date}T${times!.start}:00`, `${draft.date}T${times!.end}:00`, {
-            // En modification, le cours et ses propres réservations ne sont pas des conflits.
-            courseId: editId,
-            bookingIds: stored?.rbsBookingIds ?? [],
-          }))
-            ? r.name
-            : null),
-        ),
-      );
-      return busy.filter((x): x is string => !!x);
-    },
-    enabled: selectedRbs.length > 0 && !!draft.date && !!times,
+    queryKey: ['edt', 'rbs-busy', structureId, draft.date, times?.start, times?.end, editId],
+    queryFn: () => api.getBusyResourceIds(structureId, `${draft.date}T${times!.start}:00`, `${draft.date}T${times!.end}:00`, editId),
+    enabled: !!structureId && draft.rbsResourceIds.length > 0 && !!draft.date && !!times,
   });
+  const busyIds = busyQuery.data ?? [];
+  const takenRbs = selectedRbs.filter((r) => busyIds.includes(r.id));
+  // Disponibilité pas encore connue pour le créneau choisi : on attend avant d'enregistrer. En cas
+  // d'échec de la vérification, on n'empêche pas d'enregistrer : le serveur signale lui-même une
+  // ressource qu'il n'a pas pu réserver (rbsConflicts).
+  const availabilityPending = selectedRbs.length > 0 && !!draft.date && !!times && !busyQuery.isError && (busyQuery.isFetching || !busyQuery.data);
 
   const onPickFiles = (result: unknown) => {
     const picked = (Array.isArray(result) ? result : [result]) as PickedFile[];
@@ -141,7 +148,7 @@ export function CourseForm() {
     mediaLibraryRef.current?.hide();
   };
 
-  const errors = validateDraft(draft, slots, new Date());
+  const errors: Array<DraftError | 'roomBusy'> = [...validateDraft(draft, slots, new Date()), ...(takenRbs.length ? (['roomBusy'] as const) : [])];
   const create = useMutation({
     mutationFn: () => {
       const payload = toCoursePayload(draft, slots, user?.login ?? '', new Date());
@@ -161,10 +168,11 @@ export function CourseForm() {
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
-    if (errors.length === 0 && !create.isPending) create.mutate();
+    if (errors.length === 0 && !availabilityPending && !create.isPending) create.mutate();
   };
 
-  const errorText: Record<DraftError, string> = {
+  const errorText: Record<DraftError | 'roomBusy', string> = {
+    roomBusy: t('edt.form.error.roomBusy'),
     teachers: t('edt.form.error.teachers'),
     groups: t('edt.form.error.groups'),
     subject: t('edt.form.error.subject'),
@@ -334,11 +342,42 @@ export function CourseForm() {
                 {t('edt.form.category.mismatch', { 0: mismatched.map((r) => r.name).join(', '), 1: categoryLabel(requiredCategory!), 2: subject.subjectLabel })}
               </div>
             )}
-            {(busyQuery.data ?? []).length > 0 && (
-              <div className="alert alert-warning mt-8 mb-0" role="status">
-                {`${busyQuery.data!.join(', ')} ${t('edt.rbs.room.conflict.detected')}`}
-              </div>
-            )}
+            {takenRbs.map((taken) => {
+              const alternatives = freeAlternatives(taken, sortedRbs, busyIds, draft.rbsResourceIds);
+              return (
+                // display: block : le thème met le contenu d'une .alert en ligne (texte et boutons côte à côte).
+                <div key={taken.id} className="alert alert-danger mt-8 mb-0" role="alert" data-busy-resource={taken.id} style={{ display: 'block' }}>
+                  <p className="mb-8">{t('edt.form.room.busy', { 0: resourceLabel(taken) })}</p>
+                  <p className="mb-4" style={{ fontWeight: 700 }}>
+                    {alternatives.length ? t('edt.form.room.busy.free') : t('edt.form.room.busy.none')}
+                  </p>
+                  <div className="d-flex flex-wrap gap-8">
+                    {alternatives.map((alt) => (
+                      <button
+                        key={alt.id}
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => setDraft((d) => ({ ...d, rbsResourceIds: d.rbsResourceIds.map((x) => (x === taken.id ? alt.id : x)) }))}
+                      >
+                        {t('edt.form.room.replace', { 0: resourceLabel(alt) })}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => setDraft((d) => ({ ...d, rbsResourceIds: d.rbsResourceIds.filter((x) => x !== taken.id) }))}
+                    >
+                      {t('edt.timetable.filter.remove', { 0: taken.name })}
+                    </button>
+                    {editId && (
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => navigate('/')}>
+                        {t('edt.form.edit.cancel')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -413,7 +452,7 @@ export function CourseForm() {
 
       <div className="d-flex gap-8 justify-content-end">
         <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>{t('edt.cancel')}</button>
-        <button type="submit" className="btn btn-primary" disabled={create.isPending || (!!editId && !initialized)}>
+        <button type="submit" className="btn btn-primary" disabled={create.isPending || availabilityPending || (!!editId && !initialized)}>
           {t(editId ? 'edt.utils.save' : 'edt.course.create')}
         </button>
       </div>

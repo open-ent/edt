@@ -299,34 +299,15 @@ export const getRoomCategory = async (structureId: string, subjectName: string, 
 };
 
 /**
- * Une réservation RBS occupe-t-elle vraiment un créneau ? La réservation « mère » d'une série
- * périodique (is_periodic, sans parent) couvre toute l'année scolaire et n'occupe que ses jours :
- * ex. « jeudi 16:00-17:00 » du 24/09 au 04/07 ne doit pas rendre la salle occupée un lundi.
+ * Ressources occupées sur un créneau, en un appel : réservées (hors réservations du cours modifié)
+ * ou salle d'un autre cours de l'emploi du temps. Mêmes règles que la réservation réelle (réservation
+ * refusée ou « mère » d'une série périodique ignorée). Dates « YYYY-MM-DDTHH:mm:ss », heure de Paris.
+ * Ex. lundi 16/11 10:00-11:00 → [12] si « Salle 201 » (id 12) est prise.
  */
-const isRealBooking = (b: { is_periodic?: boolean; parent_booking_id?: number | null }): boolean =>
-  !(b.is_periodic && !b.parent_booking_id);
-
-/**
- * La ressource est-elle déjà prise sur le créneau ? Cours EDT occupant la salle (par son nom), puis
- * réservations RBS de la ressource. Ex. « Salle 201 » le 12/10 de 08:00 à 09:00.
- * Dates « YYYY-MM-DDTHH:mm:ss » ; ignore les erreurs (avertissement non bloquant).
- */
-export const isResourceBusy = async (
-  structureId: string,
-  resource: { id: number; name: string },
-  start: string,
-  end: string,
-  /** Le cours modifié et ses propres réservations ne comptent pas (on ne s'avertit pas soi-même). */
-  own: { courseId?: string; bookingIds?: number[] } = {},
-): Promise<boolean> => {
-  const edt = await fetch(`/edt/structures/${structureId}/room-conflicts/${start}/${end}?room=${encodeURIComponent(resource.name)}`, base)
-    .then((r) => (r.ok ? r.json() : []))
-    .catch(() => []);
-  if (Array.isArray(edt) && edt.some((c: { _id?: string }) => c._id !== own.courseId)) return true;
-  const rbs = await fetch(`/rbs/resource/${resource.id}/booking-conflicts/${start}/${end}`, base)
-    .then((r) => (r.ok ? r.json() : []))
-    .catch(() => []);
-  return Array.isArray(rbs) && rbs.some((b: { id?: number; is_periodic?: boolean; parent_booking_id?: number | null }) => isRealBooking(b) && !(own.bookingIds ?? []).includes(b.id ?? -1));
+export const getBusyResourceIds = async (structureId: string, start: string, end: string, courseId?: string): Promise<number[]> => {
+  const query = courseId ? `?course=${encodeURIComponent(courseId)}` : '';
+  const body = await json<{ busy?: number[] }>(await fetch(`/edt/structures/${structureId}/rbs/availability/${start}/${end}${query}`, base));
+  return body?.busy ?? [];
 };
 
 // ── Médiacentre (documents attachés au cours) ──────────────────────────────────
@@ -458,7 +439,7 @@ export const api = {
   createCourses,
   getRbsResourceList,
   getRoomCategory,
-  isResourceBusy,
+  getBusyResourceIds,
   searchMediacentre,
   getCourse,
   updateCourse,

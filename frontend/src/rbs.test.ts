@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { categoryLabel, categoryMatches, localRequiredCategory, mismatchedResources, RbsResource, resourceLabel, sortForCategory } from './rbs';
+import { categoryLabel, categoryMatches, freeAlternatives, resourcesFromRoomLabels, localRequiredCategory, mismatchedResources, RbsResource, resourceLabel, sortForCategory } from './rbs';
 
 const r = (id: number, name: string, typeCategory: string, typeName = ''): RbsResource => ({ id, name, typeCategory, typeName });
 
@@ -45,5 +45,31 @@ describe('libellé de catégorie', () => {
   it('jamais le code technique', () => {
     expect(categoryLabel('LABO_SVT')).toBe('laboratoire de sciences de la vie et de la Terre');
     expect(categoryLabel('SALLE_POLYVALENTE')).toBe('salle polyvalente');
+  });
+});
+
+describe('remplaçants d’une ressource déjà prise', () => {
+  const gymA = r(1, 'Gymnase A', 'GYMNASE', 'Gymnases');
+  const all = [r(2, 'Salle 201', 'SALLE_COURS', 'Salles'), r(3, 'Plateau sportif', 'GYMNASE', 'Plateaux'), r(4, 'Gymnase B', 'GYMNASE', 'Gymnases'), gymA, r(5, 'Gymnase C', 'GYMNASE', 'Gymnases')];
+
+  it('libres et non choisies, même type puis même catégorie puis le reste', () => {
+    expect(freeAlternatives(gymA, all, [1, 5], [1]).map((x) => x.name)).toEqual(['Gymnase B', 'Plateau sportif', 'Salle 201']);
+  });
+
+  it('limite le nombre de propositions', () => {
+    expect(freeAlternatives(gymA, all, [], [1], 2).map((x) => x.name)).toEqual(['Gymnase B', 'Gymnase C']);
+  });
+});
+
+describe('salle « texte » d’un cours jamais lié à une ressource', () => {
+  const all = [r(46, 'Amphithéâtre 2', 'AMPHITHEATRE'), r(48, 'Amphithéâtre4', 'AMPHITHEATRE'), r(15, 'Salle 100', 'SALLE_COURS')];
+
+  it('retrouve la ressource par son nom, sans casse ni espaces', () => {
+    expect(resourcesFromRoomLabels([' amphithéâtre4 '], all)).toEqual([48]);
+    expect(resourcesFromRoomLabels(['Salle 100', 'Amphithéâtre 2'], all)).toEqual([46, 15]);
+  });
+
+  it('salle inconnue ou vide : rien', () => {
+    expect(resourcesFromRoomLabels(['Salle 201', ''], all)).toEqual([]);
   });
 });
