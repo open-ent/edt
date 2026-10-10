@@ -1,13 +1,17 @@
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
+import { useHasWorkflow } from '@open-ent/react';
+
+import { WORKFLOW } from '../context';
 import { useEdtContext } from '../hooks/useEdtContext';
 
 /** Onglets de l'administration, ex. #/admin (étiquettes), #/admin/import (import STS). */
-const TABS = [
+const TABS: Array<{ to: string; end: boolean; label: string; right?: string }> = [
   { to: '/admin', end: true, label: 'edt.admin.course.tags.title' },
   { to: '/admin/import', end: false, label: 'edt.admin.tab.import' },
   { to: '/admin/exclusions', end: false, label: 'edt.settings.exclusion.title' },
+  { to: '/admin/initialisation', end: false, label: 'edt.data.init', right: WORKFLOW.initData },
 ];
 
 /**
@@ -19,6 +23,8 @@ export function Admin() {
   const { t } = useTranslation(['edt', 'common']);
   const ctx = useEdtContext();
   const navigate = useNavigate();
+  // Onglet « Initialisation » : seulement avec le droit dédié (réinitialise toute la vie scolaire).
+  const canInit = useHasWorkflow(WORKFLOW.initData) === true;
   if (ctx.ready && (!ctx.canManage || ctx.allStructures)) {
     return <div className="alert alert-warning" role="alert">{t('edt.admin.forbidden')}</div>;
   }
@@ -29,7 +35,7 @@ export function Admin() {
         <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>{t('edt.admin.back')}</button>
       </div>
       <nav aria-label={t('edt.admin.title')} className="d-flex gap-8 flex-wrap mb-16">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => !tab.right || canInit).map((tab) => (
           <NavLink key={tab.to} to={tab.to} end={tab.end} className={({ isActive }) => `btn btn-${isActive ? 'primary' : 'secondary'}`}>
             {t(tab.label)}
           </NavLink>

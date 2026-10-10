@@ -13,6 +13,8 @@ export const WORKFLOW = {
   manage: 'fr.cgi.edt.controllers.EdtController|create',
   /** Rechercher un enseignant ou une classe. */
   search: 'fr.cgi.edt.controllers.SearchController|searchUsers',
+  /** Initialiser les données de l'année (dates, vacances) — droit « viesco.setting.initalisation.data ». */
+  initData: 'fr.cgi.edt.controllers.InitController|initPeriod',
 } as const;
 
 /** Profils, d'après `user.type` de la session (cf. public/ts/model/user-types.ts). */

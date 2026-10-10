@@ -340,6 +340,36 @@ export const countCoursesBetween = async (structureId: string, start: string, en
   return Array.isArray(body) ? body.length : 0;
 };
 
+/**
+ * Zones de vacances acceptées par le serveur (InitController.isValidZone, données
+ * data.education.gouv.fr), avec la clé de leur libellé. Ex. { value: "Zone B", label: "edt.zone.select.ZoneB" }.
+ */
+export const HOLIDAYS_ZONES: Array<{ value: string; label: string }> = [
+  { value: 'Zone A', label: 'edt.zone.select.ZoneA' },
+  { value: 'Zone B', label: 'edt.zone.select.ZoneB' },
+  { value: 'Zone C', label: 'edt.zone.select.ZoneC' },
+  { value: 'Corse', label: 'edt.zone.select.Corse' },
+  { value: 'Guadeloupe', label: 'edt.zone.select.Guadeloupe' },
+  { value: 'Guyane', label: 'edt.zone.select.Guyane' },
+  { value: 'Martinique', label: 'edt.zone.select.Martinique' },
+  { value: 'Mayotte', label: 'edt.zone.select.Mayotte' },
+  { value: 'Nouvelle Calédonie', label: 'edt.zone.select.NouvelleCaledonie' },
+  { value: 'Polynésie', label: 'edt.zone.select.Polynesie' },
+  { value: 'Réunion', label: 'edt.zone.select.Reunion' },
+  { value: 'Saint Pierre et Miquelon', label: 'edt.zone.select.SaintPierreEtMiquelon' },
+  { value: 'Wallis et Futuna', label: 'edt.zone.select.WallisEtFutuna' },
+];
+
+/**
+ * Initialise les données de l'année de l'établissement (dates, vacances de la zone) dans les modules
+ * de vie scolaire, comme structureService.initStructureData de l'AngularJS. Dates « YYYY-MM-DD ».
+ */
+export const initStructureData = async (structureId: string, zone: string, start: string, end: string): Promise<void> => {
+  const q = new URLSearchParams({ zone, schoolYearStartDate: `${start} 00:00:00`, schoolYearEndDate: `${end} 23:59:59` });
+  const res = await fetch(`/edt/init/${structureId}?${q.toString()}`, base);
+  if (!res.ok) throw new Error(String(res.status));
+};
+
 /** Administration des étiquettes de cours, mêmes routes que l'AngularJS (services/courseTag.service.ts). */
 export const createCourseTag = (structureId: string, tag: CourseTagInput) => tagRequest(`/edt/structures/${structureId}/course/tag`, 'POST', tag);
 export const updateCourseTag = (id: number, tag: CourseTagInput) => tagRequest('/edt/course/tag', 'PUT', { ...tag, id });
@@ -574,6 +604,7 @@ export const api = {
   searchGroups,
   getSubjects,
   getCourseTags,
+  initStructureData,
   getExclusions,
   saveExclusion,
   deleteExclusion,
