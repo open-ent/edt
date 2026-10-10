@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Course, TimeSlot } from '../api';
@@ -31,6 +31,8 @@ interface Props {
   highlightRef?: (el: HTMLElement | null) => void;
   /** Clic sur un créneau vide (droit de gestion) : création d'un cours à ce jour et cette heure. */
   onCreateAt?: (date: string, minutes: number) => void;
+  /** Cours glissé-déposé (droit de gestion) : nouveau jour et minute de début (avant calage). */
+  onMove?: (course: Course, date: string, startMinutes: number) => void;
 }
 
 const hhmm = (minutes: number) =>
@@ -42,10 +44,14 @@ const hhmm = (minutes: number) =>
  * masqué). Survol ou clic sur un cours → détail (horaire, enseignants, classes, salles, ressources
  * RBS, étiquettes). Ex. deux cours de 08:00 à 09:00 le lundi → deux colonnes côte à côte.
  */
-export function WeekGrid({ days, showQuarterHours = true, actions, selection, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt }: Props) {
+export function WeekGrid({ days, showQuarterHours = true, actions, selection, courses, slots, teacherName, rbsName, subjectName, highlighted, highlightRef, onCreateAt, onMove }: Props) {
   const { t, i18n } = useTranslation(['edt', 'common']);
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // Glisser-déposer : cours saisi et minutes entre son début et le point de saisie (ex. saisi
+  // 20 min sous son haut → déposé à 10:20, il commence à 10:00).
+  const dragging = useRef<{ course: Course; grabMinutes: number } | null>(null);
+  const [dropDay, setDropDay] = useState<string | null>(null);
   const now = new Date();
 
   const { start, end } = useMemo(() => axisBounds(slots, courses), [slots, courses]);
@@ -109,6 +115,25 @@ export function WeekGrid({ days, showQuarterHours = true, actions, selection, co
               borderLeft: '1px solid #e0e0e0',
               background: d.getDay() === 0 ? '#fafafa' : undefined,
               cursor: onCreateAt ? 'copy' : undefined,
+              boxShadow: dropDay === ymd(d) ? 'inset 0 0 0 2px #1a5fb4' : undefined,
+            }}
+            onDragOver={(e) => {
+              if (!dragging.current) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (dropDay !== ymd(d)) setDropDay(ymd(d));
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget === e.target) setDropDay(null);
+            }}
+            onDrop={(e) => {
+              const drag = dragging.current;
+              dragging.current = null;
+              setDropDay(null);
+              if (!drag || !onMove) return;
+              e.preventDefault();
+              const offset = e.clientY - e.currentTarget.getBoundingClientRect().top;
+              onMove(drag.course, ymd(d), start + offset / PX_PER_MIN - drag.grabMinutes);
             }}
             onClick={(e) => {
               // Seul un clic sur le fond de la journée crée un cours (pas sur un cours existant).
@@ -173,6 +198,19 @@ export function WeekGrid({ days, showQuarterHours = true, actions, selection, co
                     aria-pressed={selection?.active ? selection.ids.has(c._id) : undefined}
                     data-course-id={c._id}
                     data-selected={selection?.ids.has(c._id) || undefined}
+                    draggable={!!onMove && !selection?.active && isEditable(c.startDate, now)}
+                    onDragStart={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      dragging.current = { course: c, grabMinutes: (e.clientY - rect.top) / PX_PER_MIN };
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', c._id);
+                      setOpenId(null);
+                      setHoverId(null);
+                    }}
+                    onDragEnd={() => {
+                      dragging.current = null;
+                      setDropDay(null);
+                    }}
                     onClick={() => (selection?.active ? selection.toggle(c) : setOpenId((id) => (id === c._id ? null : c._id)))}
                     onContextMenu={(e) => {
                       if (!selection) return;

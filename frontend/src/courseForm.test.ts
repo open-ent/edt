@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Group, TimeSlot } from './api';
-import { CourseDraft, draftFromCourse, effectiveTimes, emptyDraft, isEditable, prefillTimes, SeriesLine, seriesDates, seriesPayloads, toCoursePayload, validateDraft, validateSeries } from './courseForm';
+import { applyMove, CourseDraft, draftFromCourse, dropTarget, seriesWeekDates, effectiveTimes, emptyDraft, isEditable, prefillTimes, SeriesLine, seriesDates, seriesPayloads, toCoursePayload, validateDraft, validateSeries } from './courseForm';
 
 const slots: TimeSlot[] = [
   { id: 'M1', name: 'M1', startHour: '08:00', endHour: '09:00' },
@@ -159,5 +159,26 @@ describe('séries (cours récurrents)', () => {
     expect(validateSeries({ ...base, lines: [line(1, { freeSchedule: true, startTime: '10:00', endTime: '10:10' })] }, slots, NOW)).toEqual(['lineTimes']);
     expect(validateSeries({ ...base, startDate: '2026-10-05' }, slots, NOW)).toEqual(['past']);
     expect(validateSeries({ ...base, endDate: '2026-10-13', lines: [line(3)] }, slots, NOW)).toEqual(['empty']);
+  });
+});
+
+describe('glisser-déposer', () => {
+  it('calé sur le quart d’heure, même durée', () => {
+    expect(dropTarget('2026-10-13', 10 * 60 + 7, 60)).toEqual({ date: '2026-10-13', start: '10:00', end: '11:00' });
+    expect(dropTarget('2026-10-13', 10 * 60 + 8, 60)).toEqual({ date: '2026-10-13', start: '10:15', end: '11:15' });
+    expect(dropTarget('2026-10-13', 23 * 60 + 50, 60)).toEqual({ date: '2026-10-13', start: '23:45', end: '23:59' });
+  });
+
+  it('plages nommées si l’horaire tombe pile dessus, sinon horaire libre', () => {
+    expect(applyMove(valid, slots, { date: '2026-10-13', start: '08:00', end: '10:00' })).toMatchObject({ date: '2026-10-13', freeSchedule: false, startSlotId: 'M1', endSlotId: 'M2' });
+    expect(applyMove(valid, slots, { date: '2026-10-13', start: '08:15', end: '09:15' })).toMatchObject({ freeSchedule: true, startTime: '08:15', endTime: '09:15' });
+  });
+});
+
+describe('série modifiée : une occurrence par semaine, au jour demandé', () => {
+  it('lundis passés au mardi : chaque semaine garde son cours', () => {
+    expect(seriesWeekDates('2026-11-02', '2026-11-09', 2, false)).toEqual(['2026-11-03', '2026-11-10']);
+    expect(seriesWeekDates('2026-11-04', '2026-11-16', 1, false)).toEqual(['2026-11-02', '2026-11-09', '2026-11-16']);
+    expect(seriesWeekDates('2026-11-02', '2026-11-23', 5, true)).toEqual(['2026-11-06', '2026-11-20']);
   });
 });

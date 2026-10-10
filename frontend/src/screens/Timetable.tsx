@@ -12,12 +12,13 @@ import { FilterSidebar } from '../features/FilterSidebar';
 import { MonthGrid } from '../features/MonthGrid';
 import { SearchBox } from '../features/SearchBox';
 import { CourseActions, CourseSelection, WeekGrid } from '../features/WeekGrid';
-import { courseSubject } from '../grid';
+import { courseSubject, minutesOf } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection, toggleGroup } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { useTimetableState } from '../hooks/useTimetableState';
 import { initialAnchor, periodOf, step, VIEW_MODES } from '../period';
 import { toggleSelected } from '../selection';
+import { dropTarget } from '../courseForm';
 import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
 
 
@@ -195,9 +196,20 @@ export function Timetable() {
   const [toDelete, setToDelete] = useState<Course | null>(null);
   // Cours d'une série : on demande d'abord « ce cours seulement » ou « toute la série ».
   const [toEdit, setToEdit] = useState<Course | null>(null);
+  // Glisser-déposer : le formulaire s'ouvre aux nouvelles heures (comme l'AngularJS), rien n'est
+  // enregistré tant qu'on n'a pas validé. Ex. #/edit/<id>?date=2026-10-13&start=10:00&end=11:00.
+  const [moveQuery, setMoveQuery] = useState('');
+  const onMove = (c: Course, date: string, startMinutes: number) => {
+    const move = dropTarget(date, startMinutes, minutesOf(c.endDate) - minutesOf(c.startDate));
+    const query = `date=${move.date}&start=${move.start}&end=${move.end}`;
+    if (c.recurrence) {
+      setMoveQuery(query);
+      setToEdit(c);
+    } else navigate(`/edit/${c._id}?${query}`);
+  };
   const actions: CourseActions | undefined =
     ctx.canManage && !ctx.allStructures
-      ? { onEdit: (c) => (c.recurrence ? setToEdit(c) : navigate(`/edit/${c._id}`)), onDelete: setToDelete }
+      ? { onEdit: (c) => (c.recurrence ? (setMoveQuery(''), setToEdit(c)) : navigate(`/edit/${c._id}`)), onDelete: setToDelete }
       : undefined;
   // Actions de masse : mode sélection (un clic coche un cours), clic droit toujours actif.
   const [selectMode, setSelectMode] = useState(false);
@@ -419,6 +431,7 @@ export function Timetable() {
             highlighted={highlightCourse}
             highlightRef={(el) => { highlightRef.current = el; }}
             onCreateAt={ctx.canManage && !ctx.allStructures ? (date, minutes) => navigate(`/create?date=${date}&minutes=${minutes}`) : undefined}
+            onMove={actions ? onMove : undefined}
           />
           {!coursesLoading && courses.length === 0 && (
             <p className="text-muted mt-8">{t('edt.courses.empty.grid')}</p>
@@ -472,8 +485,14 @@ export function Timetable() {
       {toEdit && (
         <EditScopeDialog
           label={courseLabel(toEdit)}
-          onChoose={(scope) => navigate(scope === 'series' ? `/edit/${toEdit._id}?serie=1` : `/edit/${toEdit._id}`)}
-          onClose={() => setToEdit(null)}
+          onChoose={(scope) => {
+            const extra = moveQuery ? `${scope === 'series' ? '&' : '?'}${moveQuery}` : '';
+            navigate(scope === 'series' ? `/edit/${toEdit._id}?serie=1${extra}` : `/edit/${toEdit._id}${extra}`);
+          }}
+          onClose={() => {
+            setToEdit(null);
+            setMoveQuery('');
+          }}
         />
       )}
     </div>

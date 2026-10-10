@@ -329,6 +329,7 @@
   "edt.bulk.stop": "End selection",
   "edt.bulk.error": "The operation did not succeed for all courses. Try again.",
   "edt.bulk.delete.confirm": "Delete the [[0]] selected courses? Rooms and equipment booked for them are released.",
+  "edt.form.move.info": "Course moved to [[0]], from [[1]] to [[2]]: check then save (nothing changes until you save).",
   "edt.form.edit.series": "Edit the whole series",
   "edt.form.edit.series.info": "All upcoming occurrences of the series are updated; past courses stay unchanged.",
   "edt.form.series.updated.count": "[[0]] upcoming courses will be updated:",

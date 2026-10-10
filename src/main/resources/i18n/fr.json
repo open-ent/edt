@@ -329,6 +329,7 @@
   "edt.bulk.stop": "Terminer la sélection",
   "edt.bulk.error": "L'opération n'a pas abouti pour tous les cours. Réessayez.",
   "edt.bulk.delete.confirm": "Supprimer les [[0]] cours sélectionnés ? Les salles et le matériel réservés pour eux sont libérés.",
+  "edt.form.move.info": "Cours déplacé au [[0]], de [[1]] à [[2]] : vérifiez puis enregistrez (rien n'est modifié tant que vous n'avez pas enregistré).",
   "edt.form.edit.series": "Modifier toute la série",
   "edt.form.edit.series.info": "Toutes les occurrences à venir de la série sont modifiées ; les cours déjà passés ne changent pas.",
   "edt.form.series.updated.count": "[[0]] cours à venir seront modifiés :",

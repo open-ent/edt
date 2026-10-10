@@ -287,3 +287,50 @@ export function seriesPayloads(
     }));
   });
 }
+
+/**
+ * Point de dépôt d'un cours glissé sur la grille : début calé sur le quart d'heure, même durée,
+ * fin limitée à 23:59. Ex. cours de 1 h déposé à 10:07 → 10:00-11:00 ; à 10:08 → 10:15-11:15.
+ */
+export function dropTarget(date: string, startMinutes: number, durationMinutes: number): { date: string; start: string; end: string } {
+  const hh = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const start = Math.max(0, Math.min(Math.round(startMinutes / 15) * 15, 23 * 60 + 45));
+  return { date, start: hh(start), end: hh(Math.min(start + Math.max(durationMinutes, 15), 23 * 60 + 59)) };
+}
+
+/**
+ * Applique un déplacement (glisser-déposer) au formulaire, comme l'AngularJS qui rouvre le cours
+ * aux nouvelles heures : plages nommées si l'horaire tombe pile sur des plages, sinon horaire
+ * libre. Ex. 08:00-10:00 avec M1 08:00-09:00 et M2 09:00-10:00 → plages M1-M2.
+ */
+export function applyMove(draft: CourseDraft, slots: TimeSlot[], move: { date: string; start: string; end: string }): CourseDraft {
+  const startSlot = slots.find((s) => s.startHour.slice(0, 5) === move.start);
+  const endSlot = slots.find((s) => s.endHour.slice(0, 5) === move.end);
+  if (startSlot && endSlot && minutesOfHour(endSlot.endHour) > minutesOfHour(startSlot.startHour)) {
+    return { ...draft, date: move.date, freeSchedule: false, startSlotId: startSlot.id, endSlotId: endSlot.id };
+  }
+  return { ...draft, date: move.date, freeSchedule: true, startTime: move.start, endTime: move.end };
+}
+
+/**
+ * Dates d'une série MODIFIÉE, comme le serveur (updateRecurrence) : chaque semaine (lundi-dimanche)
+ * de la période garde son occurrence, déplacée au jour demandé dans SA semaine — même si ce jour
+ * tombe après la fin. Ex. lundis 02/11 et 09/11 passés au mardi → 03/11 et 10/11.
+ */
+export function seriesWeekDates(startDate: string, endDate: string, dayOfWeek: number, everyTwoWeek: boolean): string[] {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+  const weekMonday = (d: Date) => {
+    const m = new Date(d);
+    m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+    return m;
+  };
+  const dates: string[] = [];
+  for (const monday = weekMonday(start); monday <= end; monday.setDate(monday.getDate() + (everyTwoWeek ? 14 : 7))) {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + ((dayOfWeek + 6) % 7));
+    dates.push(toYmd(d));
+  }
+  return dates;
+}

@@ -6,7 +6,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { api, Group } from '../api';
 import { sortGroups } from '../context';
-import { CourseDraft, draftFromCourse, DraftError, effectiveTimes, emptyDraft, isEditable, lineTimes, prefillTimes, SeriesError, SeriesLine, seriesDates, seriesPayloads, toCoursePayload, validateDraft, validateSeries } from '../courseForm';
+import { applyMove, CourseDraft, draftFromCourse, DraftError, effectiveTimes, emptyDraft, isEditable, lineTimes, prefillTimes, SeriesError, SeriesLine, seriesDates, seriesPayloads, seriesWeekDates, toCoursePayload, validateDraft, validateSeries } from '../courseForm';
 import { MediacentrePicker } from '../features/MediacentrePicker';
 import { MultiPicker } from '../features/MultiPicker';
 import { addResources, PickedFile, workspaceResource } from '../resources';
@@ -36,6 +36,11 @@ export function CourseForm() {
   const qc = useQueryClient();
   const [params] = useSearchParams();
   const { id: editId } = useParams();
+  // Cours glissé-déposé sur la grille : nouveau jour et horaire proposés (#/edit/<id>?date=…&start=…&end=…).
+  const moveDate = params.get('date');
+  const moveStart = params.get('start');
+  const moveEnd = params.get('end');
+  const move = editId && moveDate && moveStart && moveEnd ? { date: moveDate, start: moveStart, end: moveEnd } : null;
   const courseQuery = useQuery({ queryKey: ['edt', 'course', editId], queryFn: () => api.getCourse(editId!), enabled: !!editId });
   const stored = courseQuery.data;
   const { selection, anchor } = useTimetableState();
@@ -75,7 +80,7 @@ export function CourseForm() {
     const from = recurrenceDatesQuery.data.startDate.slice(0, 10);
     setDraft((d) => ({ ...d, date: from > today ? from : today }));
     setSeries((x) => ({ ...x, endDate: recurrenceDatesQuery.data!.endDate.slice(0, 10), everyTwoWeek: !!stored.everyTwoWeek }));
-    setLineDay(String(new Date(stored.startDate.replace(' ', 'T')).getDay()));
+    setLineDay(String(new Date((move ? `${move.date}T12:00:00` : stored.startDate).replace(' ', 'T')).getDay()));
     setSerieReady(true);
   }, [serieMode, serieReady, initialized, stored, recurrenceDatesQuery.data]);
   const seriesUi = recurrent || serieMode;
@@ -92,7 +97,9 @@ export function CourseForm() {
     if (editId) {
       // Modification : le cours lui-même, pas la sélection de l'emploi du temps.
       if (!stored) return;
-      setDraft(draftFromCourse({ ...stored, structureId: stored.structureId ?? structureId }, groups, slotsQuery.data));
+      const loaded = draftFromCourse({ ...stored, structureId: stored.structureId ?? structureId }, groups, slotsQuery.data);
+      // Série : la période reste celle de la série, seuls le jour (lineDay) et l'horaire suivent le dépôt.
+      setDraft(move ? (params.get('serie') === '1' ? { ...applyMove(loaded, slotsQuery.data, move), date: loaded.date } : applyMove(loaded, slotsQuery.data, move)) : loaded);
       setInitialized(true);
       return;
     }
@@ -168,7 +175,11 @@ export function CourseForm() {
         ? seriesLines
             .flatMap((l) => {
               const t = lineTimes(l, slots);
-              return t ? seriesDates(draft.date, series.endDate, l.dayOfWeek, series.everyTwoWeek).map((d) => ({ startAt: `${d}T${t.start}:00`, endAt: `${d}T${t.end}:00` })) : [];
+              // Modification : une occurrence par semaine, comme le serveur ; création : à partir du début.
+              const dates = serieMode
+                ? seriesWeekDates(draft.date, series.endDate, l.dayOfWeek, series.everyTwoWeek)
+                : seriesDates(draft.date, series.endDate, l.dayOfWeek, series.everyTwoWeek);
+              return t ? dates.map((d) => ({ startAt: `${d}T${t.start}:00`, endAt: `${d}T${t.end}:00` })) : [];
             })
             // Modification de série : seules les occurrences à venir sont touchées.
             .filter((x) => !serieMode || new Date(x.startAt).getTime() > Date.now())
@@ -297,6 +308,11 @@ export function CourseForm() {
     <form onSubmit={onSubmit} noValidate aria-labelledby="edt-course-form-title" style={{ maxWidth: 860 }}>
       <h1 id="edt-course-form-title" className="mb-16">{t(serieMode ? 'edt.form.edit.series' : editId ? 'edt.schedule.update' : 'edt.course.new')}</h1>
       {editId && !initialized && <p role="status">{t('edt.form.edit.loading')}</p>}
+      {move && (
+        <div className="alert alert-info" role="status">
+          {t('edt.form.move.info', { 0: new Date(`${move.date}T12:00:00`).toLocaleDateString('fr', { weekday: 'long', day: 'numeric', month: 'long' }), 1: move.start, 2: move.end })}
+        </div>
+      )}
       {stored?.recurrence && <div className="alert alert-info" role="status">{t(serieMode ? 'edt.form.edit.series.info' : 'edt.form.edit.occurrence')}</div>}
 
       <div className="card p-16 mb-16">
