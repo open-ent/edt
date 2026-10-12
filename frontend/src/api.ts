@@ -1,3 +1,4 @@
+import type { CalendarOptions } from './period';
 import type { StoredCourse } from './courseForm';
 import type { RbsResource } from './rbs';
 
@@ -593,7 +594,36 @@ export const saveUiPreference = async (preference: UiPreference): Promise<void> 
   });
 };
 
+// ── Options d'affichage du calendrier (préférence partagée avec l'AngularJS) ───────────────
+/**
+ * Préférence `calendarOptions` du socle AngularJS (directive calendar, infra-front) : quarts
+ * d'heure, samedi, dimanche. Même clé dans les deux interfaces : un réglage vaut pour les deux.
+ * Ex. `{ displayQuarterHours: true, displaySaturday: true, displaySunday: false }`.
+ */
+export const getCalendarOptions = async (): Promise<CalendarOptions> => {
+  const res = await fetch('/userbook/preference/calendarOptions', base);
+  if (!res.ok) return {};
+  const body = (await res.json()) as { preference?: string } | null;
+  if (!body?.preference) return {};
+  try {
+    return (JSON.parse(body.preference) as CalendarOptions) ?? {};
+  } catch {
+    return {};
+  }
+};
+
+export const saveCalendarOptions = async (options: CalendarOptions): Promise<void> => {
+  await fetch('/userbook/preference/calendarOptions', {
+    ...base,
+    method: 'PUT',
+    headers: mutHeaders(),
+    body: JSON.stringify(options),
+  });
+};
+
 export const api = {
+  getCalendarOptions,
+  saveCalendarOptions,
   getGroups,
   getSubGroups,
   getTeachers,

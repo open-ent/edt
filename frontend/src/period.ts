@@ -68,3 +68,23 @@ export function step(mode: ViewMode, anchor: Date, direction: 1 | -1): Date {
 export function initialAnchor(today: Date): Date {
   return today.getDay() === 0 ? addDays(today, 1) : today;
 }
+
+/** Options d'affichage du calendrier, préférence `calendarOptions` partagée avec l'AngularJS. */
+export interface CalendarOptions {
+  displayQuarterHours?: boolean;
+  displaySaturday?: boolean;
+  displaySunday?: boolean;
+}
+
+/**
+ * Jours affichés selon les options samedi / dimanche (directive calendar du socle AngularJS :
+ * masqués par défaut). La vue jour montre toujours le jour demandé.
+ * Ex. semaine du 12/10/2026, samedi seul coché → du lundi 12 au samedi 17.
+ */
+export function visibleDays(days: Date[], mode: ViewMode, opts: CalendarOptions): Date[] {
+  if (mode === 'day') return days;
+  return days.filter((d) => (d.getDay() !== 6 || !!opts.displaySaturday) && (d.getDay() !== 0 || !!opts.displaySunday));
+}
+
+/** Nombre de jours par semaine affichés : 5, 6 ou 7. */
+export const daysPerWeek = (opts: CalendarOptions): number => 5 + (opts.displaySaturday ? 1 : 0) + (opts.displaySunday ? 1 : 0);

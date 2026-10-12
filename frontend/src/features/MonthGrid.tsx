@@ -10,6 +10,8 @@ import { CourseActions, CourseDetails, CourseSelection } from './WeekGrid';
 interface Props {
   /** Jours affichés, par semaines entières (14 en quinzaine, 28 à 42 en mois). */
   days: Date[];
+  /** Jours par semaine affichés (5, 6 ou 7 selon samedi / dimanche). */
+  columns?: number;
   /** Mois de référence en vue mois (les jours hors de ce mois sont estompés) ; absent en quinzaine. */
   month?: number;
   courses: Course[];
@@ -28,7 +30,7 @@ const hhmm = (minutes: number) =>
  * avec leur matière (même présentation que la vue mois AngularJS, template/calendar/course-month.html).
  * Clic sur un cours → détail. Ex. quinzaine du 12/10 : deux rangées de sept jours.
  */
-export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectName, actions, selection }: Props) {
+export function MonthGrid({ days, columns = 7, month, courses, teacherName, rbsName, subjectName, actions, selection }: Props) {
   const { i18n } = useTranslation(['edt', 'common']);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const now = new Date();
@@ -41,11 +43,11 @@ export function MonthGrid({ days, month, courses, teacherName, rbsName, subjectN
     return map;
   }, [courses]);
 
-  const weekdays = days.slice(0, 7).map((d) => d.toLocaleDateString(i18n.language || 'fr', { weekday: 'long' }));
+  const weekdays = days.slice(0, columns).map((d) => d.toLocaleDateString(i18n.language || 'fr', { weekday: 'long' }));
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(96px, 1fr))', minWidth: 672, border: '1px solid #e0e0e0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(96px, 1fr))`, minWidth: 96 * columns, border: '1px solid #e0e0e0' }}>
         {weekdays.map((w) => (
           <div key={w} className="text-center fw-bold p-4" style={{ textTransform: 'capitalize', fontSize: 13, borderBottom: '1px solid #e0e0e0' }}>
             {w}

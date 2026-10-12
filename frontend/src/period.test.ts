@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { initialAnchor, periodOf, step } from './period';
+import { daysPerWeek, initialAnchor, periodOf, step, visibleDays } from './period';
 import { ymd } from './utils';
 
 const d = (iso: string) => new Date(`${iso}T12:00:00`);
@@ -37,5 +37,26 @@ describe('navigation', () => {
   it('le dimanche, ouverture sur la semaine suivante', () => {
     expect(ymd(initialAnchor(d('2026-10-18')))).toBe('2026-10-19');
     expect(ymd(initialAnchor(d('2026-10-14')))).toBe('2026-10-14');
+  });
+});
+
+describe('jours affichés (samedi / dimanche)', () => {
+  const week = periodOf('week', new Date(2026, 9, 14)).days;
+  it('masqués par défaut, comme le calendrier AngularJS', () => {
+    expect(visibleDays(week, 'week', {}).map((d) => d.getDate())).toEqual([12, 13, 14, 15, 16]);
+    expect(daysPerWeek({})).toBe(5);
+  });
+  it('samedi seul, puis samedi et dimanche', () => {
+    expect(visibleDays(week, 'week', { displaySaturday: true }).map((d) => d.getDate())).toEqual([12, 13, 14, 15, 16, 17]);
+    expect(visibleDays(week, 'week', { displaySaturday: true, displaySunday: true })).toHaveLength(7);
+    expect(daysPerWeek({ displaySunday: true })).toBe(6);
+  });
+  it('la vue jour garde le jour demandé, même un samedi', () => {
+    const saturday = periodOf('day', new Date(2026, 9, 17)).days;
+    expect(visibleDays(saturday, 'day', {})).toHaveLength(1);
+  });
+  it('mois : semaines entières de 5 jours sans le week-end', () => {
+    const month = periodOf('month', new Date(2026, 9, 1)).days;
+    expect(visibleDays(month, 'month', {}).length % 5).toBe(0);
   });
 });

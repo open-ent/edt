@@ -22,8 +22,6 @@ interface TimetableState {
   setMode: (mode: ViewMode) => void;
   view: 'grid' | 'list';
   setView: (view: 'grid' | 'list') => void;
-  showQuarterHours: boolean;
-  setShowQuarterHours: (show: boolean) => void;
 }
 
 const Context = createContext<TimetableState | null>(null);
@@ -34,10 +32,9 @@ export function TimetableStateProvider({ children }: { children: ReactNode }) {
   const [anchor, setAnchor] = useState(() => initialAnchor(new Date()));
   const [mode, setMode] = useState<ViewMode>('week');
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [showQuarterHours, setShowQuarterHours] = useState(true);
   const value = useMemo(
-    () => ({ selection, setSelection, selectionKey, setSelectionKey, anchor, setAnchor, mode, setMode, view, setView, showQuarterHours, setShowQuarterHours }),
-    [selection, selectionKey, anchor, mode, view, showQuarterHours],
+    () => ({ selection, setSelection, selectionKey, setSelectionKey, anchor, setAnchor, mode, setMode, view, setView}),
+    [selection, selectionKey, anchor, mode, view],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

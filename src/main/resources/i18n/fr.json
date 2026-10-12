@@ -397,5 +397,7 @@
   "edt.form.resource.add": "Ajouter",
   "edt.form.resource.added": "Déjà ajoutée",
   "edt.form.mediacentre.error": "La recherche dans le médiacentre n'a pas abouti. Réessayez plus tard.",
-  "edt.form.close": "Fermer"
+  "edt.form.close": "Fermer",
+  "edt.timetable.show.saturday": "Afficher le samedi",
+  "edt.timetable.show.sunday": "Afficher le dimanche"
 }

@@ -16,7 +16,8 @@ import { courseSubject, minutesOf } from '../grid';
 import { coursesFilter, effectiveGroupIds, EMPTY_SELECTION, Selection, toggleGroup } from '../filter';
 import { useEdtContext } from '../hooks/useEdtContext';
 import { useTimetableState } from '../hooks/useTimetableState';
-import { initialAnchor, periodOf, step, VIEW_MODES } from '../period';
+import { daysPerWeek, initialAnchor, periodOf, step, visibleDays, VIEW_MODES } from '../period';
+import { useCalendarOptions } from '../hooks/useCalendarOptions';
 import { toggleSelected } from '../selection';
 import { dropTarget } from '../courseForm';
 import { courseSortKey, dayLabel, hhmm, ymd } from '../utils';
@@ -66,9 +67,10 @@ export function Timetable() {
     setMode,
     view,
     setView,
-    showQuarterHours,
-    setShowQuarterHours,
   } = useTimetableState();
+  // Quarts d'heure, samedi, dimanche : préférence partagée avec l'AngularJS (calendarOptions).
+  const { options: calendarOptions, set: setCalendarOptions } = useCalendarOptions();
+  const showQuarterHours = calendarOptions.displayQuarterHours;
   // Un lien profond (#/?date=…) place directement la période sur la bonne date.
   useEffect(() => {
     if (!targetDate) return;
@@ -378,9 +380,21 @@ export function Timetable() {
         </div>
         {view === 'grid' && (mode === 'day' || mode === 'week') && (
           <label className="d-flex align-items-center gap-4 m-0">
-            <input type="checkbox" checked={showQuarterHours} onChange={(e) => setShowQuarterHours(e.target.checked)} />
+            <input type="checkbox" checked={showQuarterHours} onChange={(e) => setCalendarOptions({ displayQuarterHours: e.target.checked })} />
             {t('edt.timetable.quarters')}
           </label>
+        )}
+        {view === 'grid' && mode !== 'day' && (
+          <>
+            <label className="d-flex align-items-center gap-4 m-0">
+              <input type="checkbox" checked={calendarOptions.displaySaturday} onChange={(e) => setCalendarOptions({ displaySaturday: e.target.checked })} />
+              {t('edt.timetable.show.saturday')}
+            </label>
+            <label className="d-flex align-items-center gap-4 m-0">
+              <input type="checkbox" checked={calendarOptions.displaySunday} onChange={(e) => setCalendarOptions({ displaySunday: e.target.checked })} />
+              {t('edt.timetable.show.sunday')}
+            </label>
+          </>
         )}
       </div>
 
@@ -410,7 +424,8 @@ export function Timetable() {
       {/* Vue GRILLE : semaine sur un axe horaire réel, cours simultanés côte à côte */}
       {hasSelection && view === 'grid' && (mode === 'fortnight' || mode === 'month') && (
         <MonthGrid
-          days={period.days}
+          days={visibleDays(period.days, mode, calendarOptions)}
+          columns={daysPerWeek(calendarOptions)}
           month={mode === 'month' ? anchor.getMonth() : undefined}
           courses={courses}
           teacherName={teacherName}
@@ -424,7 +439,7 @@ export function Timetable() {
       {hasSelection && view === 'grid' && (mode === 'day' || mode === 'week') && (
         <>
           <WeekGrid
-            days={period.days}
+            days={visibleDays(period.days, mode, calendarOptions)}
             showQuarterHours={showQuarterHours}
             actions={actions}
             selection={courseSelection}
