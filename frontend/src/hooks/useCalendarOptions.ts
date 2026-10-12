@@ -22,10 +22,13 @@ export function useCalendarOptions() {
   const save = useMutation({
     mutationFn: api.saveCalendarOptions,
     // Affichage immédiat, sans attendre le serveur.
-    onMutate: (next: CalendarOptions) => {
+    // Lecture en cours annulée d'abord : sinon sa réponse écraserait le choix qu'on vient de faire.
+    onMutate: async (next: CalendarOptions) => {
+      await qc.cancelQueries({ queryKey: key });
       qc.setQueryData<CalendarOptions>(key, next);
     },
   });
   const set = (patch: CalendarOptions) => save.mutate({ ...options, ...patch });
-  return { options, set };
+  // Cases désactivées tant que la préférence n'est pas lue (ex. clic avant la réponse du serveur).
+  return { options, set, ready: query.isFetched };
 }

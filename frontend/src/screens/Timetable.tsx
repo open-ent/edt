@@ -69,7 +69,7 @@ export function Timetable() {
     setView,
   } = useTimetableState();
   // Quarts d'heure, samedi, dimanche : préférence partagée avec l'AngularJS (calendarOptions).
-  const { options: calendarOptions, set: setCalendarOptions } = useCalendarOptions();
+  const { options: calendarOptions, set: setCalendarOptions, ready: calendarOptionsReady } = useCalendarOptions();
   const showQuarterHours = calendarOptions.displayQuarterHours;
   // Un lien profond (#/?date=…) place directement la période sur la bonne date.
   useEffect(() => {
@@ -380,18 +380,18 @@ export function Timetable() {
         </div>
         {view === 'grid' && (mode === 'day' || mode === 'week') && (
           <label className="d-flex align-items-center gap-4 m-0">
-            <input type="checkbox" checked={showQuarterHours} onChange={(e) => setCalendarOptions({ displayQuarterHours: e.target.checked })} />
+            <input type="checkbox" checked={showQuarterHours} disabled={!calendarOptionsReady} onChange={(e) => setCalendarOptions({ displayQuarterHours: e.target.checked })} />
             {t('edt.timetable.quarters')}
           </label>
         )}
         {view === 'grid' && mode !== 'day' && (
           <>
             <label className="d-flex align-items-center gap-4 m-0">
-              <input type="checkbox" checked={calendarOptions.displaySaturday} onChange={(e) => setCalendarOptions({ displaySaturday: e.target.checked })} />
+              <input type="checkbox" checked={calendarOptions.displaySaturday} disabled={!calendarOptionsReady} onChange={(e) => setCalendarOptions({ displaySaturday: e.target.checked })} />
               {t('edt.timetable.show.saturday')}
             </label>
             <label className="d-flex align-items-center gap-4 m-0">
-              <input type="checkbox" checked={calendarOptions.displaySunday} onChange={(e) => setCalendarOptions({ displaySunday: e.target.checked })} />
+              <input type="checkbox" checked={calendarOptions.displaySunday} disabled={!calendarOptionsReady} onChange={(e) => setCalendarOptions({ displaySunday: e.target.checked })} />
               {t('edt.timetable.show.sunday')}
             </label>
           </>
