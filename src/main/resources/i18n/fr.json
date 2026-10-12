@@ -323,7 +323,7 @@
   "edt.form.edit.notfound": "Ce cours est introuvable : il a peut-être été supprimé entre-temps.",
   "edt.form.edit.occurrence": "Ce cours fait partie d'une série : seule cette occurrence est modifiée, les autres restent inchangées.",
   "edt.admin.tab.import": "Import de l'emploi du temps",
-  "edt.admin.importsts.hint": "Les deux fichiers XML s'exportent depuis STS-Web (STS-EMP et EMP-STS). L'import remplace les cours à venir issus d'un import précédent.",
+  "edt.admin.importsts.hint": "STS-EMP : fichier exporté depuis STS-Web (enseignants, matières, classes). EMP-STS : fichier exporté par le logiciel d'emploi du temps (EDT, UnDeuxTemps…), qui contient les cours. L'import remplace les cours à venir issus d'un import STS précédent ; les cours passés et ceux saisis à la main sont conservés.",
   "edt.admin.importsts.pending": "Import en cours…",
   "edt.admin.importsts.no.reports": "Aucun import STS pour l'instant.",
   "edt.admin.importsts.report": "Rapport d'import",
