@@ -23,8 +23,10 @@ export function useCalendarOptions() {
     mutationFn: api.saveCalendarOptions,
     // Affichage immédiat, sans attendre le serveur.
     // Lecture en cours annulée d'abord : sinon sa réponse écraserait le choix qu'on vient de faire.
-    onMutate: async (next: CalendarOptions) => {
-      await qc.cancelQueries({ queryKey: key });
+    // Mise à jour SYNCHRONE du cache : la case cochée doit changer d'état tout de suite (un `await`
+    // avant `setQueryData` retardait l'affichage au-delà du clic).
+    onMutate: (next: CalendarOptions) => {
+      void qc.cancelQueries({ queryKey: key });
       qc.setQueryData<CalendarOptions>(key, next);
     },
   });
