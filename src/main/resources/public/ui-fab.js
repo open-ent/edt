@@ -29,7 +29,7 @@
   var T = fr
     ? { label: "Version de l'interface", next: 'Nouvelle version', prev: 'Ancienne version', current: 'actuelle' }
     : { label: 'Interface version', next: 'New version', prev: 'Previous version', current: 'current' };
-  var BANNERS = '[class$="-ui-switch"], [data-ui-banner]';
+  var BANNERS = '[class*="-ui-switch"], [data-ui-banner]';
 
   function read() {
     if (!key) return Promise.resolve({});
@@ -42,9 +42,17 @@
       .catch(function () { return {}; });
   }
 
+  // Un bandeau est « affiché » s'il n'est ni masqué ni sans boîte : `offsetParent` vaut null pour TOUT élément
+  // en position fixe (c'est le cas des bandeaux), il ne peut donc pas servir de test.
+  function shown(el) {
+    if (el.hidden || el.id === 'openent-ui-fab') return false;
+    var style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+  }
+
   function bannerVisible() {
     var list = document.querySelectorAll(BANNERS);
-    for (var i = 0; i < list.length; i++) { if (!list[i].hidden && list[i].offsetParent !== null) return true; }
+    for (var i = 0; i < list.length; i++) { if (shown(list[i])) return true; }
     return false;
   }
 
