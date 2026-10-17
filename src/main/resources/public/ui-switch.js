@@ -62,9 +62,10 @@
     write(preference);
 
     banner.querySelector('[data-action="try"]').addEventListener('click', function () {
-      preference.ui = 'react';
-      // `?ui=react` double l'enregistrement : la préférence fraîchement écrite peut manquer au cache
-      // de la session en cours, la dérogation d'URL est honorée sans condition.
+      // « L'essayer » ne pose PAS de préférence `ui` : le choix durable se fait dans les paramètres du compte, et
+      // une préférence posée ici ferait disparaître le bouton de bascule (il laisse la place à ce réglage).
+      // Dérogation d'URL seule ; l'invitation est close puisqu'elle a été suivie.
+      preference.invitationDismissed = true;
       write(preference).then(function () { window.location.href = '/edt?ui=react'; });
     });
 

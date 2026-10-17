@@ -20,7 +20,7 @@ const SETTINGS_URL = '/dashboard/account/settings';
  * Bandeau de retour vers l'IHM AngularJS pendant la cohabitation des deux interfaces — symétrique
  * de l'invitation posée sur l'ancienne IHM (`public/ui-switch.js`), même mécanisme que l'Agenda.
  * Le retour passe par une question en une ligne : c'est le seul moment où l'on saura POURQUOI
- * quelqu'un repart. Ex. réponse stockée : `{ ui: 'angular', feedback: 'il manque la vue mensuelle' }`.
+ * quelqu'un repart. Ex. réponse stockée : `{ feedback: 'il manque la vue mensuelle' }`.
  *
  * Pour relire les réponses : {@code MATCH (u:User)-[:PREFERS]->(uac:UserAppConf)
  *  WHERE uac.edtUi CONTAINS 'feedback' RETURN u.id, uac.edtUi}
@@ -70,12 +70,11 @@ export function UiSwitchBanner() {
     void save
       .mutateAsync({
         ...preference,
-        ui: 'angular',
         ...(withFeedback && answer ? { feedback: answer, feedbackAt: new Date().toISOString() } : {}),
       })
       .finally(() => {
-        // `?ui=angular` double l'enregistrement : la préférence écrite à l'instant peut manquer au
-        // cache de la session, la dérogation d'URL est honorée sans condition.
+        // Aucune préférence `ui` n'est posée : le choix durable se fait dans les paramètres du compte, et le
+        // bouton de bascule doit rester disponible. Dérogation d'URL seule.
         window.location.href = '/edt?ui=angular';
       });
   };

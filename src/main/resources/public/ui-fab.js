@@ -93,7 +93,9 @@
   read().then(function (preference) {
     if (preference.ui === 'react' || preference.ui === 'angular') return;
     var fab = build();
-    var refresh = function () { fab.hidden = bannerVisible(); };
+    // N'écrit que si l'état change : réaffecter `hidden` avec la même valeur crée tout de même un enregistrement de
+    // mutation, que l'observateur relirait aussitôt — boucle sans fin qui gèle la page.
+    var refresh = function () { var h = bannerVisible(); if (fab.hidden !== h) fab.hidden = h; };
     // Le bandeau du module apparaît après sa propre lecture de la préférence : on laisse un instant puis on suit ses changements.
     setTimeout(function () {
       refresh();
