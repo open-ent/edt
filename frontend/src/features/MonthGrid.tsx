@@ -33,6 +33,8 @@ const hhmm = (minutes: number) =>
 export function MonthGrid({ days, columns = 7, month, courses, teacherName, rbsName, subjectName, actions, selection }: Props) {
   const { i18n } = useTranslation(['edt', 'common']);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Survol : détail en lecture seule, comme l'infobulle AngularJS ; le clic l'ouvre avec ses actions.
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
   const now = new Date();
   const today = ymd(now);
 
@@ -79,7 +81,7 @@ export function MonthGrid({ days, columns = 7, month, courses, teacherName, rbsN
                 const to = minutesOf(c.endDate);
                 const subject = courseSubject(c, subjectName);
                 return (
-                  <div key={k} style={{ position: 'relative' }}>
+                  <div key={k} style={{ position: 'relative' }} onMouseEnter={() => setHoverKey(k)} onMouseLeave={() => setHoverKey(null)}>
                     <button
                       type="button"
                       data-course-id={c._id}
@@ -113,6 +115,9 @@ export function MonthGrid({ days, columns = 7, month, courses, teacherName, rbsN
                     </button>
                     {openKey === k && (
                       <CourseDetails course={c} subject={subject} from={hhmm(from)} to={hhmm(to)} teacherName={teacherName} rbsName={rbsName} actions={actions} />
+                    )}
+                    {openKey !== k && hoverKey === k && !selection?.active && (
+                      <CourseDetails course={c} subject={subject} from={hhmm(from)} to={hhmm(to)} teacherName={teacherName} rbsName={rbsName} interactive={false} />
                     )}
                   </div>
                 );
