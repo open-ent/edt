@@ -15,15 +15,13 @@
 (function () {
   'use strict';
 
-  // Adresse du module → clé de préférence (absente : le module n'a pas de réglage dans les paramètres).
-  var APPS = {
-    diary: 'diaryUi', edt: 'edtUi', calendar: 'calendarUi', exercizer: 'exercizerUi', competences: 'competencesUi',
-    forum: null, pages: null, stats: null, rbs: null, searchengine: null, communities: null,
-    timelinegenerator: null, incidents: null, massmailing: null, 'statistics-presences': null
-  };
+  // Modules à double interface (adresse). La clé de préférence du compte est `<adresse>Ui` sans caractère non
+  // alphanumérique (entcore les retire) : `diary` → `diaryUi`, `statistics-presences` → `statisticspresencesUi`.
+  var APPS = ['diary', 'edt', 'calendar', 'exercizer', 'competences', 'forum', 'pages', 'stats', 'rbs', 'searchengine',
+    'communities', 'timelinegenerator', 'incidents', 'massmailing', 'statistics-presences'];
   var app = (window.location.pathname.split('/')[1] || '');
-  if (!Object.prototype.hasOwnProperty.call(APPS, app) || document.getElementById('openent-ui-fab')) return;
-  var key = APPS[app];
+  if (APPS.indexOf(app) < 0 || document.getElementById('openent-ui-fab')) return;
+  var key = app.replace(/[^a-zA-Z0-9]/g, '') + 'Ui';
 
   var fr = /^fr/i.test(document.documentElement.lang || navigator.language || 'fr');
   var T = fr
@@ -32,7 +30,6 @@
   var BANNERS = '[class*="-ui-switch"], [data-ui-banner]';
 
   function read() {
-    if (!key) return Promise.resolve({});
     return fetch('/userbook/preference/' + key, { credentials: 'include' })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (body) {
