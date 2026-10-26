@@ -9,3 +9,15 @@
   width: min(640px, calc(100vw - 32px));
   background: var(--openent-white, #fff);
 }
+
+/* Entrée sélectionnée (onglets de navigation, sélecteurs de vue, boutons à bascule) : même bleu que dans Présences.
+   Le thème colore .btn-primary et .btn-secondary presque à l'identique : sans cela la sélection ne ressort pas.
+   #1f7fa5 garde un contraste de 4,5:1 avec le texte blanc. */
+nav[aria-label] > .btn.btn-primary,
+.btn-group[role="group"] > .btn.btn-primary,
+.btn.btn-primary[aria-pressed="true"] {
+  background-color: #1f7fa5;
+  border-color: #1f7fa5;
+  color: #fff;
+  font-weight: 700;
+}
