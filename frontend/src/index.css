@@ -21,3 +21,19 @@ nav[aria-label] > .btn.btn-primary,
   color: #fff;
   font-weight: 700;
 }
+
+/* Pastilles (.badge) : le thème laisse le texte hériter du gris du corps de page (#4a4a4a), illisible sur les
+   fonds pleins (contraste 1,6 sur bg-primary et bg-secondary, 2,1 sur bg-danger, 1,0 sur bg-dark). Blanc sur les
+   fonds foncés, texte sombre sur les fonds clairs. Même correctif dans le socle (`_badge.scss`). */
+.badge.bg-primary,
+.badge.bg-secondary,
+.badge.bg-danger,
+.badge.bg-dark {
+  --openent-badge-color: #fff;
+  font-weight: 600;
+}
+.badge.bg-success,
+.badge.bg-warning,
+.badge.bg-info {
+  --openent-badge-color: #212529;
+}
