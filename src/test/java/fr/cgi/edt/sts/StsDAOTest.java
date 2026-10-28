@@ -82,7 +82,7 @@ public class StsDAOTest {
 
     @Test
     public void retrieveTeachers_Should_Process_CorrectRequestAndParameters_WithOnlyOneTeacher(TestContext ctx) {
-        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: {uai}})<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User {profiles:['Teacher']}) WHERE (toLower(u.lastName) = {lastName_0} AND toLower(u.firstName) = {firstName_0} AND u.birthDate = {birthDate_0}) RETURN u.id AS id, u.lastName AS lastName, u.firstName AS firstName, u.birthDate as birthDate, u.displayName AS displayName";
+        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: $uai})<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User {profiles:['Teacher']}) WHERE (toLower(u.lastName) = $lastName_0 AND toLower(u.firstName) = $firstName_0 AND u.birthDate = $birthDate_0) RETURN u.id AS id, u.lastName AS lastName, u.firstName AS firstName, u.birthDate as birthDate, u.displayName AS displayName";
 
         Mockito.doAnswer(invocation -> {
             String query = invocation.getArgument(0);
@@ -98,7 +98,7 @@ public class StsDAOTest {
 
     @Test
     public void retrieveTeachers_Should_Process_CorrectRequestAndParameters_WithTwoTeachers(TestContext ctx) {
-        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: {uai}})<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User {profiles:['Teacher']}) WHERE (toLower(u.lastName) = {lastName_0} AND toLower(u.firstName) = {firstName_0} AND u.birthDate = {birthDate_0}) OR (toLower(u.lastName) = {lastName_1} AND toLower(u.firstName) = {firstName_1} AND u.birthDate = {birthDate_1}) RETURN u.id AS id, u.lastName AS lastName, u.firstName AS firstName, u.birthDate as birthDate, u.displayName AS displayName";
+        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: $uai})<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User {profiles:['Teacher']}) WHERE (toLower(u.lastName) = $lastName_0 AND toLower(u.firstName) = $firstName_0 AND u.birthDate = $birthDate_0) OR (toLower(u.lastName) = $lastName_1 AND toLower(u.firstName) = $firstName_1 AND u.birthDate = $birthDate_1) RETURN u.id AS id, u.lastName AS lastName, u.firstName AS firstName, u.birthDate as birthDate, u.displayName AS displayName";
         Teacher teacher = new Teacher().setId("1").setLastName("DOE").setFirstName("Jane").setBirthDate("2018-06-03");
         TEACHERS.add(teacher);
         CORRECT_TEACHERS_PARAMS
@@ -136,7 +136,7 @@ public class StsDAOTest {
 
     @Test
     public void retrieveSubjects_Should_Process_CorrectRequestAndParameters_WithOnlyOneSubject(TestContext ctx) {
-        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: {uai}})<-[:SUBJECT]-(sub:Subject) WHERE sub.code IN {codes} RETURN sub.id AS id, sub.code AS code, sub.label AS label;";
+        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: $uai})<-[:SUBJECT]-(sub:Subject) WHERE sub.code IN $codes RETURN sub.id AS id, sub.code AS code, sub.label AS label;";
         Mockito.doAnswer(invocation -> {
             String query = invocation.getArgument(0);
             JsonObject params = invocation.getArgument(1);
@@ -151,7 +151,7 @@ public class StsDAOTest {
 
     @Test
     public void retrieveSubjects_Should_Process_CorrectRequestAndParameters_WithTwoSubjects(TestContext ctx) {
-        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: {uai}})<-[:SUBJECT]-(sub:Subject) WHERE sub.code IN {codes} RETURN sub.id AS id, sub.code AS code, sub.label AS label;";
+        String CORRECT_REQUEST = "MATCH (s:Structure {UAI: $uai})<-[:SUBJECT]-(sub:Subject) WHERE sub.code IN $codes RETURN sub.id AS id, sub.code AS code, sub.label AS label;";
         Subject subject = new Subject().setCode("109800");
         SUBJECTS.add(subject);
         CORRECT_SUBJECTS_PARAMS.put("codes", CORRECT_SUBJECTS_PARAMS.getJsonArray("codes").add(subject.code()));

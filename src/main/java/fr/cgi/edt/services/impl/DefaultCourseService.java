@@ -281,7 +281,7 @@ public class DefaultCourseService implements CourseService {
     public Future<Audience> getAudienceFromId(String audienceId, boolean isGroup) {
         Promise<Audience> promise = Promise.promise();
 
-        String query = "MATCH (a:" + (isGroup ? "Group" : "Class") + ") WHERE a.id = {audienceId} " +
+        String query = "MATCH (a:" + (isGroup ? "Group" : "Class") + ") WHERE a.id = $audienceId " +
                 "RETURN a.id AS id, a.name AS name, a.externalId AS externalId";
 
         JsonObject params = new JsonObject().put(Field.AUDIENCEID, audienceId);

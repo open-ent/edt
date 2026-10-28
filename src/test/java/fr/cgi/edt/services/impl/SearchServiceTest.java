@@ -32,8 +32,8 @@ public class SearchServiceTest {
 
     @Test
     public void testSearchGroups(TestContext ctx) {
-        String expectedQuery = "MATCH (g)-[:BELONGS|:DEPENDS]->(s:Structure {id:{structureId}}) WHERE toLower(g.name) " +
-                "CONTAINS {query} AND (g:Class OR g:FunctionalGroup) RETURN g.id as id, g.name as displayName, 'GROUP' " +
+        String expectedQuery = "MATCH (g)-[:BELONGS|:DEPENDS]->(s:Structure {id:$structureId}) WHERE toLower(g.name) " +
+                "CONTAINS $query AND (g:Class OR g:FunctionalGroup) RETURN g.id as id, g.name as displayName, 'GROUP' " +
                 "as type, g.id as groupId, g.name as groupName ";
         JsonObject expectedParams = new JsonObject()
                 .put("structureId", "structureId")
@@ -58,8 +58,8 @@ public class SearchServiceTest {
 
     @Test
     public void testSearchManualGroup(TestContext ctx) {
-        String expectedQuery = "MATCH (User {profiles:['Student']})-[:IN]->(g:ManualGroup)-[:BELONGS|:DEPENDS]->(s:Structure {id: {structureId}})" +
-                " WHERE toLower(g.name) CONTAINS {query} RETURN DISTINCT g.id as id, g.name as displayName, 'GROUP' as" +
+        String expectedQuery = "MATCH (User {profiles:['Student']})-[:IN]->(g:ManualGroup)-[:BELONGS|:DEPENDS]->(s:Structure {id: $structureId})" +
+                " WHERE toLower(g.name) CONTAINS $query RETURN DISTINCT g.id as id, g.name as displayName, 'GROUP' as" +
                 " type, g.id as groupId, g.name as groupName ";
         JsonObject expectedParams = new JsonObject()
                 .put("structureId", "structureId")

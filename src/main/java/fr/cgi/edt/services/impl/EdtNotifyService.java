@@ -42,8 +42,8 @@ public class EdtNotifyService {
         if (structureId == null || classes == null || classes.isEmpty()) return;
 
         final String query =
-                "MATCH (s:Structure {id:{structureId}})<-[:BELONGS]-(c:Class)<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User) " +
-                "WHERE c.name IN {classes} AND 'Student' IN u.profiles " +
+                "MATCH (s:Structure {id:$structureId})<-[:BELONGS]-(c:Class)<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User) " +
+                "WHERE c.name IN $classes AND 'Student' IN u.profiles " +
                 "OPTIONAL MATCH (u)-[:RELATED]-(r:User) WHERE 'Relative' IN r.profiles " +
                 "RETURN collect(DISTINCT u.id) + collect(DISTINCT r.id) AS ids";
         final JsonObject params = new JsonObject().put("structureId", structureId).put("classes", classes);

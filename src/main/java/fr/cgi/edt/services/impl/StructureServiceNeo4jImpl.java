@@ -13,7 +13,7 @@ import java.util.List;
 public class StructureServiceNeo4jImpl implements StructureService {
     @Override
     public void retrieveUAI(String id, Handler<Either<String, String>> handler) {
-        String query = "MATCH(s:Structure {id:{id}}) RETURN s.UAI as uai";
+        String query = "MATCH(s:Structure {id:$id}) RETURN s.UAI as uai";
         JsonObject params = new JsonObject().put("id", id);
         Neo4j.getInstance().execute(query, params, Neo4jResult.validUniqueResultHandler(evt -> {
             if (evt.isLeft()) handler.handle(new Either.Left<>(evt.left().getValue()));
@@ -23,7 +23,7 @@ public class StructureServiceNeo4jImpl implements StructureService {
 
     @Override
     public void fetchStructuresInfos(List<String> structuresId, Handler<Either<String, JsonArray>> handler) {
-        String query = "MATCH (s:Structure) WHERE s.id IN {structuresId} return s.id as id, s.name as name";
+        String query = "MATCH (s:Structure) WHERE s.id IN $structuresId return s.id as id, s.name as name";
         JsonObject params = new JsonObject().put("structuresId", structuresId);
         Neo4j.getInstance().execute(query, params, Neo4jResult.validResultHandler(handler));
     }

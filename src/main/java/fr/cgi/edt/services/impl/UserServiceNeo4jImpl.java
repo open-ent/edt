@@ -26,7 +26,7 @@ public class UserServiceNeo4jImpl implements UserService {
     @Override
     @SuppressWarnings("unchecked")
     public void getChildrenInformation(UserInfos user, Handler<Either<String, JsonArray>> handler) {
-        String query = "MATCH (:User {id:{userId}})<-[RELATED]-(u:User)-[:IN]->(g:ProfileGroup)-[:DEPENDS]->(s:Structure), " +
+        String query = "MATCH (:User {id:$userId})<-[RELATED]-(u:User)-[:IN]->(g:ProfileGroup)-[:DEPENDS]->(s:Structure), " +
                 "(u)--(m:Group{filter:\"Student\"})--(b:Class) " +
                 "RETURN distinct u.id AS id, u.firstName AS firstName, u.lastName AS lastName," +
                 " u.displayName AS displayName, u.classes AS classes, collect(DISTINCT b.id) AS idClasses, collect(DISTINCT s.id) AS structures ";

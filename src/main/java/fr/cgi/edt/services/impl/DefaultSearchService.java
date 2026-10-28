@@ -62,8 +62,8 @@ public class DefaultSearchService implements SearchService {
      */
     private void searchGroups(String query, String structureId, Handler<Either<String, JsonArray>> handler) {
         String searchQuery =
-                "MATCH (g)-[:BELONGS|:DEPENDS]->(s:Structure {id:{structureId}}) " +
-                "WHERE toLower(g.name) CONTAINS {query} " +
+                "MATCH (g)-[:BELONGS|:DEPENDS]->(s:Structure {id:$structureId}) " +
+                "WHERE toLower(g.name) CONTAINS $query " +
                 "AND (g:Class OR g:FunctionalGroup) " +
                 "RETURN g.id as id, g.name as displayName, 'GROUP' as type, g.id as groupId, g.name as groupName ";
 
@@ -81,8 +81,8 @@ public class DefaultSearchService implements SearchService {
      */
     private void searchManualGroup(String query, String structureId, Handler<Either<String, JsonArray>> handler) {
         String searchQuery =
-                "MATCH (User {profiles:['Student']})-[:IN]->(g:ManualGroup)-[:BELONGS|:DEPENDS]->(s:Structure {id: {structureId}}) " +
-                "WHERE toLower(g.name) CONTAINS {query} " +
+                "MATCH (User {profiles:['Student']})-[:IN]->(g:ManualGroup)-[:BELONGS|:DEPENDS]->(s:Structure {id: $structureId}) " +
+                "WHERE toLower(g.name) CONTAINS $query " +
                 "RETURN DISTINCT g.id as id, g.name as displayName, 'GROUP' as type, g.id as groupId, g.name as groupName ";
 
         JsonObject params = new JsonObject()

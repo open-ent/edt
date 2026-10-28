@@ -31,7 +31,7 @@ public class StsDAO {
     }
 
     public void retrieveStructureIdentifier(String uai, Promise promise) {
-        String query = "MATCH (s:Structure {UAI: {uai}}) RETURN s.id as id, s.name as name";
+        String query = "MATCH (s:Structure {UAI: $uai}) RETURN s.id as id, s.name as name";
         JsonObject params = new JsonObject().put("uai", uai);
         neo4j.execute(query, params, Neo4jResult.validUniqueResultHandler(evt -> {
             if (evt.isLeft()) promise.fail(evt.left().getValue());
@@ -45,7 +45,7 @@ public class StsDAO {
             return;
         }
 
-        StringBuilder builder = new StringBuilder("MATCH (s:Structure {UAI: {uai}})<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User {profiles:['Teacher']}) WHERE");
+        StringBuilder builder = new StringBuilder("MATCH (s:Structure {UAI: $uai})<-[:DEPENDS]-(:ProfileGroup)<-[:IN]-(u:User {profiles:['Teacher']}) WHERE");
         JsonObject params = new JsonObject()
                 .put("uai", uai);
         for (int i = 0; i < teachers.size(); i++) {
@@ -73,7 +73,7 @@ public class StsDAO {
 
         JsonObject params = new JsonObject().put("uai", uai)
                 .put("codes", new JsonArray(subjects.stream().map(Subject::code).collect(Collectors.toList())));
-        String query = "MATCH (s:Structure {UAI: {uai}})<-[:SUBJECT]-(sub:Subject) WHERE sub.code IN {codes} RETURN sub.id AS id, sub.code AS code, sub.label AS label;";
+        String query = "MATCH (s:Structure {UAI: $uai})<-[:SUBJECT]-(sub:Subject) WHERE sub.code IN $codes RETURN sub.id AS id, sub.code AS code, sub.label AS label;";
         neo4j.execute(query, params, Neo4jResult.validResultHandler(evt -> {
             if (evt.isLeft()) promise.fail(evt.left().getValue());
             else promise.complete(evt.right().getValue());
@@ -81,8 +81,8 @@ public class StsDAO {
     }
 
     public void retrieveAudiences(String uai, List<String> audiences, Promise promise) {
-        String query = "MATCH (g)-[:BELONGS|:DEPENDS]->(s:Structure {UAI:{uai}}) " +
-                "WHERE g.name IN {audiences} AND (g:Class OR g:FunctionalGroup)" +
+        String query = "MATCH (g)-[:BELONGS|:DEPENDS]->(s:Structure {UAI:$uai}) " +
+                "WHERE g.name IN $audiences AND (g:Class OR g:FunctionalGroup)" +
                 "RETURN g.name as name, g.externalId as externalId";
         JsonObject params = new JsonObject()
                 .put("uai", uai)

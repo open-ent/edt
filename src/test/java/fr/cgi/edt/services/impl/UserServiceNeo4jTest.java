@@ -38,7 +38,7 @@ public class UserServiceNeo4jTest {
     @Test
     public void testGetChildrenInformation(TestContext ctx) {
 
-        String expectedQuery = "MATCH (:User {id:{userId}})<-[RELATED]-(u:User)-[:IN]->(g:ProfileGroup)-[:DEPENDS]->(s:Structure), " +
+        String expectedQuery = "MATCH (:User {id:$userId})<-[RELATED]-(u:User)-[:IN]->(g:ProfileGroup)-[:DEPENDS]->(s:Structure), " +
                 "(u)--(m:Group{filter:\"Student\"})--(b:Class) " +
                 "RETURN distinct u.id AS id, u.firstName AS firstName, u.lastName AS lastName," +
                 " u.displayName AS displayName, u.classes AS classes, collect(DISTINCT b.id) AS idClasses, collect(DISTINCT s.id) AS structures ";
