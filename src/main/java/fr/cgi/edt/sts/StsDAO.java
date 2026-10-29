@@ -50,7 +50,7 @@ public class StsDAO {
                 .put("uai", uai);
         for (int i = 0; i < teachers.size(); i++) {
             Teacher teacher = teachers.get(i);
-            builder.append(" (toLower(u.lastName) = {lastName_" + i + "} AND toLower(u.firstName) = {firstName_" + i + "} AND u.birthDate = {birthDate_" + i + "})");
+            builder.append(" (toLower(u.lastName) = $lastName_" + i + " AND toLower(u.firstName) = $firstName_" + i + " AND u.birthDate = $birthDate_" + i + ")");
             params.put("lastName_" + i, teacher.lastName().toLowerCase())
                     .put("firstName_" + i, teacher.firstName().toLowerCase())
                     .put("birthDate_" + i, teacher.birthDate());
