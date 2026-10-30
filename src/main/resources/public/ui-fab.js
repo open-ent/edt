@@ -43,6 +43,8 @@
   }
 
   function build() {
+    // Interface actuellement affichée : AngularJS charge `window.angular` (ng-app.js), la page React non. Le menu s'y adapte.
+    var current = (typeof window.angular !== 'undefined') ? 'angular' : 'react';
     var style = document.createElement('style');
     style.textContent =
       '#openent-ui-fab{position:fixed;right:16px;bottom:16px;z-index:9500;font:14px/1.3 sans-serif}' +
@@ -59,8 +61,8 @@
     fab.hidden = true;
     fab.innerHTML =
       '<div class="menu" role="menu" hidden>' +
-      '<button type="button" role="menuitem" data-ui="react">' + T.next + '</button>' +
-      '<button type="button" role="menuitem" data-ui="angular" aria-current="true">' + T.prev + ' (' + T.current + ')</button>' +
+      '<button type="button" role="menuitem" data-ui="react"' + (current === 'react' ? ' aria-current="true"' : '') + '>' + T.next + (current === 'react' ? ' (' + T.current + ')' : '') + '</button>' +
+      '<button type="button" role="menuitem" data-ui="angular"' + (current === 'angular' ? ' aria-current="true"' : '') + '>' + T.prev + (current === 'angular' ? ' (' + T.current + ')' : '') + '</button>' +
       '</div>' +
       '<button type="button" aria-haspopup="menu">⇄ ' + T.label + '</button>';
     var menu = fab.querySelector('.menu');
@@ -68,7 +70,7 @@
     Array.prototype.forEach.call(menu.querySelectorAll('[data-ui]'), function (item) {
       item.addEventListener('click', function () {
         var ui = item.getAttribute('data-ui');
-        if (ui === 'angular') { menu.hidden = true; return; }
+        if (ui === current) { menu.hidden = true; return; }
         window.location.href = window.location.pathname + '?ui=' + ui;
       });
     });
@@ -80,7 +82,8 @@
     var fab = build();
     // N'écrit que si l'état change : réaffecter `hidden` avec la même valeur crée tout de même un enregistrement de
     // mutation, que l'observateur relirait aussitôt — boucle sans fin qui gèle la page.
-    var refresh = function () { var h = bannerVisible(); if (fab.hidden !== h) fab.hidden = h; };
+    // pas de doublon : si le socle React affiche déjà sa propre bascule (`[data-ui-fab]`), celle-ci s'efface
+    var refresh = function () { var h = bannerVisible() || !!document.querySelector('[data-ui-fab]'); if (fab.hidden !== h) fab.hidden = h; };
     // Le bandeau du module apparaît après sa propre lecture de la préférence : on laisse un instant puis on suit ses changements.
     setTimeout(function () {
       refresh();
