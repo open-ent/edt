@@ -1,6 +1,6 @@
 services:
   maven:
-    image: maven:3.9-eclipse-temurin-21
+    image: maven:3.9-eclipse-temurin-25
     user: '$DEFAULT_DOCKER_USER'
     working_dir: /usr/src/maven
     volumes:
@@ -10,8 +10,13 @@ services:
       MAVEN_CONFIG: /var/maven/.m2
 
   node:
-    image: opendigitaleducation/node:22-alpine-pnpm
+    image: node:26-alpine
     working_dir: /home/node/app
+    # node:26-alpine n'embarque ni yarn ni corepack : build.sh installe yarn 1 à chaque
+    # lancement, dans un préfixe accessible à l'utilisateur non root.
+    environment:
+      NPM_CONFIG_PREFIX: /tmp/npm-global
+      PATH: /tmp/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - ./:/home/node/app
       - ~/.npm:/.npm
