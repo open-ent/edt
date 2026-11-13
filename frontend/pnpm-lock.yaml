@@ -672,7 +672,7 @@ packages:
     resolution: {integrity: sha512-IO/1L0aaqhsj1ry+ZL/WzupM5zzxHWtwWaaYCoG7QHS/smMifp5wwELofwMLO1AxjVhokruENPBJCOEeWxl70A==, tarball: https://npm.pkg.github.com/download/@open-ent/client/2.5.30-patched/bb7c142422009089b470b896296dedf6e14979a2}
 
   '@open-ent/react@2.5.30-patched':
-    resolution: {integrity: sha512-LJ2keReDmKpMAMaJ97xlqJnj6GeNt1bsgt/k4iZUtMmEwKWklqA5Ep863JuPJSrBp1UmGscxednFF4pw09s67Q==, tarball: https://npm.pkg.github.com/download/@open-ent/react/2.5.30-patched/60bbeeb3e6481d65d226eb3f834c3b55d81de64a}
+    resolution: {integrity: sha512-EdprBrLHSlaOIUXvuro+CZTBEIk40licdDwEyc7q3pIDezh/9H6U7XPdhXiSMtY9Ho+4hf2eMLc64FJvxFmtxA==, tarball: https://npm.pkg.github.com/download/@open-ent/react/2.5.30-patched/9cc4118b1c6a8f259ef0e912c770ab854499d6e8}
     peerDependencies:
       '@react-spring/web': 9.7.5
       '@tanstack/react-query': 5.62.7
