@@ -3,6 +3,7 @@ package fr.cgi.edt.controllers;
 import fr.cgi.edt.core.constants.Field;
 import fr.cgi.edt.core.enums.Zone;
 import fr.cgi.edt.security.WorkflowActionUtils;
+import fr.cgi.edt.services.HolidaysService;
 import fr.cgi.edt.services.InitService;
 import fr.cgi.edt.services.ServiceFactory;
 import fr.wseduc.rs.Get;
@@ -19,9 +20,11 @@ import java.util.stream.Stream;
 public class InitController extends ControllerHelper {
 
     private final InitService initService;
+    private final HolidaysService holidaysService;
 
     public InitController(ServiceFactory serviceFactory) {
         this.initService = serviceFactory.initService();
+        this.holidaysService = serviceFactory.holidaysService();
         this.vertx = serviceFactory.vertx();
     }
 
@@ -47,7 +50,8 @@ public class InitController extends ControllerHelper {
                         log.error(message + err.getMessage());
                         badRequest(request);
                     })
-                    .onSuccess(event -> renderJson(request, event));
+                    .onSuccess(event -> holidaysService.rememberInitZone(structure, zone)
+                            .onComplete(saved -> renderJson(request, event)));
 
         } else {
             String message = String.format("[EDT@%s::initPeriod] Wrong zone value: %s", this.getClass().getSimpleName(), zone);

@@ -1,6 +1,8 @@
 package fr.cgi.edt;
 
 import fr.cgi.edt.controllers.*;
+import fr.cgi.edt.cron.HolidaysRefreshCron;
+import fr.wseduc.cron.CronTrigger;
 import fr.cgi.edt.models.holiday.HolidaysConfig;
 import fr.cgi.edt.services.ServiceFactory;
 import fr.cgi.edt.services.impl.DefaultCourseService;
@@ -53,6 +55,18 @@ public class Edt extends BaseServer {
         addController(new CourseController(eb, new DefaultCourseService(serviceFactory)));
         addController(new ConfigController());
         addController(new CourseTagController(new DefaultCourseTagService(sql, mongoDb)));
+        addController(new HolidaysController(serviceFactory.holidaysService()));
+
+        // Rafraîchissement hebdomadaire des vacances scolaires (zone de chaque établissement).
+        // Désactivable en mettant "holidays-refresh-cron" à une chaîne vide.
+        String holidaysCron = config.getString("holidays-refresh-cron", "0 0 3 ? * MON");
+        if (holidaysCron != null && !holidaysCron.trim().isEmpty()) {
+            try {
+                new CronTrigger(vertx, holidaysCron).schedule(new HolidaysRefreshCron(serviceFactory.holidaysService()));
+            } catch (Exception e) {
+                log.error("[Edt] Invalid holidays-refresh-cron expression: " + holidaysCron, e);
+            }
+        }
 
         MongoDbConf.getInstance().setCollection(EDT_COLLECTION);
         setDefaultResourceFilter(new ShareAndOwner());

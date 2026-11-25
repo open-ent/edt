@@ -1,5 +1,5 @@
 import { Modal } from '@open-ent/react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -21,6 +21,25 @@ export function AdminInit() {
   const [zone, setZone] = useState('');
   const [confirm, setConfirm] = useState(false);
   const dialogId = useId();
+  const qc = useQueryClient();
+  // Zone enregistrée pour l'établissement, déduite de son académie sauf choix contraire : elle
+  // présélectionne la liste. Ex. Morlaix → académie de Rennes → zone B.
+  const zoneQuery = useQuery({ queryKey: ['edt', 'holidays-zone', structureId], queryFn: () => api.getHolidaysZone(structureId), enabled: !!structureId });
+  const zoneInfo = zoneQuery.data;
+  useEffect(() => {
+    if (zoneInfo?.zone && !zone) setZone(zoneInfo.zone);
+  }, [zoneInfo, zone]);
+  const resetZone = useMutation({
+    mutationFn: () => api.setHolidaysZone(structureId, null),
+    onSuccess: (data) => {
+      qc.setQueryData(['edt', 'holidays-zone', structureId], data);
+      if (data.zone) setZone(data.zone);
+    },
+  });
+  const zoneLabel = (value: string | null | undefined) => {
+    const found = HOLIDAYS_ZONES.find((z) => z.value === value);
+    return found ? t(found.label) : value ?? '';
+  };
   useEffect(() => {
     if (yearQuery.data && !start && !end) {
       setStart(yearQuery.data.start);
@@ -28,7 +47,11 @@ export function AdminInit() {
     }
   }, [yearQuery.data, start, end]);
   const valid = !!start && !!end && start < end && !!zone;
-  const init = useMutation({ mutationFn: () => api.initStructureData(structureId, zone, start, end), onSettled: () => setConfirm(false) });
+  const init = useMutation({
+    mutationFn: () => api.initStructureData(structureId, zone, start, end),
+    onSettled: () => setConfirm(false),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['edt', 'holidays-zone', structureId] }),
+  });
 
   return (
     <section aria-labelledby="edt-admin-init-title">
@@ -52,6 +75,24 @@ export function AdminInit() {
             <option value="">{t('edt.zone.select.option.default')}</option>
             {HOLIDAYS_ZONES.map((z) => <option key={z.value} value={z.value}>{t(z.label)}</option>)}
           </select>
+          {zoneInfo && (
+            <div className="mt-8 small" data-edt-holidays-zone={zoneInfo.source ?? 'unknown'}>
+              {zoneInfo.source === 'ACADEMY' && zoneInfo.academy && <span>{t('edt.holidays.zone.academy', { 0: zoneInfo.academy })}</span>}
+              {zoneInfo.source === 'MANUAL' && (
+                <span className="d-inline-flex flex-wrap align-items-center gap-8">
+                  {t('edt.holidays.zone.manual')}
+                  {zoneInfo.detectedZone && (
+                    <button type="button" className="btn btn-sm btn-outline-secondary" disabled={resetZone.isPending} onClick={() => resetZone.mutate()}>
+                      {t('edt.holidays.zone.reset', { 0: zoneLabel(zoneInfo.detectedZone) })}
+                    </button>
+                  )}
+                </span>
+              )}
+              {!zoneInfo.zone && <span>{t('edt.holidays.zone.unknown')}</span>}
+              {resetZone.isSuccess && <div className="text-success mt-4" role="status">{t('edt.holidays.zone.reset.done')}</div>}
+              <div className="text-gray-700 mt-4">{t('edt.holidays.auto')}</div>
+            </div>
+          )}
         </div>
         <div className="alert alert-warning" role="note">{t('edt.zone.choose.warning')}</div>
         <div>

@@ -371,6 +371,28 @@ export const initStructureData = async (structureId: string, zone: string, start
   if (!res.ok) throw new Error(String(res.status));
 };
 
+/** Zone de vacances de l'établissement : retenue, et déduite de son académie. */
+export interface HolidaysZone {
+  zone: string | null;
+  source: 'ACADEMY' | 'MANUAL' | null;
+  academy: string | null;
+  detectedZone: string | null;
+  detectedAcademy: string | null;
+}
+
+export const getHolidaysZone = async (structureId: string): Promise<HolidaysZone | null> => {
+  const res = await fetch(`/edt/structures/${structureId}/holidays-zone`, base);
+  if (!res.ok) return null;
+  return (await res.json()) as HolidaysZone;
+};
+
+/** Force la zone (`zone`) ou revient à celle de l'académie (`null`) ; les vacances sont réimportées. */
+export const setHolidaysZone = async (structureId: string, zone: string | null): Promise<HolidaysZone> => {
+  const res = await fetch(`/edt/structures/${structureId}/holidays-zone`, { ...base, method: 'PUT', headers: mutHeaders(), body: JSON.stringify({ zone }) });
+  if (!res.ok) throw new Error(String(res.status));
+  return (await res.json()) as HolidaysZone;
+};
+
 /** Administration des étiquettes de cours, mêmes routes que l'AngularJS (services/courseTag.service.ts). */
 export const createCourseTag = (structureId: string, tag: CourseTagInput) => tagRequest(`/edt/structures/${structureId}/course/tag`, 'POST', tag);
 export const updateCourseTag = (id: number, tag: CourseTagInput) => tagRequest('/edt/course/tag', 'PUT', { ...tag, id });
@@ -635,6 +657,8 @@ export const api = {
   getSubjects,
   getCourseTags,
   initStructureData,
+  getHolidaysZone,
+  setHolidaysZone,
   getExclusions,
   saveExclusion,
   deleteExclusion,

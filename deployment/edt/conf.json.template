@@ -20,6 +20,7 @@
             "public-holidays": "${publicHolidays}",
             "school-holidays": "${schoolHolidays}"
         },
+        "holidays-refresh-cron": "0 0 3 ? * MON",
         "entcore.port" : 8009
       }
     }

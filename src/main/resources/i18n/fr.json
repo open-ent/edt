@@ -399,5 +399,11 @@
   "edt.form.mediacentre.error": "La recherche dans le médiacentre n'a pas abouti. Réessayez plus tard.",
   "edt.form.close": "Fermer",
   "edt.timetable.show.saturday": "Afficher le samedi",
-  "edt.timetable.show.sunday": "Afficher le dimanche"
+  "edt.timetable.show.sunday": "Afficher le dimanche",
+  "edt.holidays.zone.academy": "Zone déduite de l'académie de [[0]].",
+  "edt.holidays.zone.manual": "Zone choisie par l'établissement.",
+  "edt.holidays.zone.unknown": "L'académie de l'établissement n'est pas connue : choisissez sa zone.",
+  "edt.holidays.zone.reset": "Revenir à la zone de l'académie ([[0]])",
+  "edt.holidays.zone.reset.done": "Zone de l'académie rétablie, vacances mises à jour.",
+  "edt.holidays.auto": "Les vacances et jours fériés de la zone sont mis à jour automatiquement chaque semaine. Les exclusions saisies par l'établissement sont conservées."
 }

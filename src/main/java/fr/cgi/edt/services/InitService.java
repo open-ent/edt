@@ -17,4 +17,14 @@ public interface InitService {
      */
     Future<JsonObject> init(String structure, String zone, boolean initSchoolYear,
                             String schoolYearStartDate, String schoolYearEndDate);
+
+    /**
+     * Réimporte les vacances scolaires et jours fériés de l'année scolaire en cours et de la
+     * suivante, en ne remplaçant que les périodes importées (source IMPORT).
+     *
+     * @param structure structure identifier
+     * @param zone      zone de vacances (« Zone B », « Corse »…)
+     * @return          {status: ok, zone, schoolYears} ou {status: skipped} si l'établissement n'a pas d'année scolaire
+     */
+    Future<JsonObject> refresh(String structure, String zone);
 }

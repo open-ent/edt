@@ -20,9 +20,11 @@ import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.codec.BodyCodec;
 import org.entcore.common.service.impl.SqlCrudService;
+import org.entcore.common.sql.SqlResult;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -38,6 +40,9 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
     private static final String PREPARED = "prepared";
     public static final String HOUR_START = "00:00:00";
     public static final String HOUR_END = "23:59:59";
+    public static final String SOURCE_IMPORT = "IMPORT";
+    private static final String IMPORT_ROW = "(to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS')::timestamp, " +
+            "to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS')::timestamp, ?::varchar, ?::varchar, ?::boolean, ?::varchar)";
     private final HolidaysConfig holidaysConfig;
 
 
@@ -83,6 +88,88 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
        return promise.future();
     }
 
+    @Override
+    public Future<JsonObject> refresh(String structure, String zone) {
+        Promise<JsonObject> promise = Promise.promise();
+        String yearQuery = "SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date, to_char(end_date, 'YYYY-MM-DD') AS end_date " +
+                "FROM viesco.setting_period WHERE id_structure = ? AND code = 'YEAR' ORDER BY start_date DESC LIMIT 1";
+        sql.prepared(yearQuery, new JsonArray().add(structure), SqlResult.validUniqueResultHandler(yearRes -> {
+            if (yearRes.isLeft()) {
+                promise.fail(yearRes.left().getValue());
+                return;
+            }
+            JsonObject year = yearRes.right().getValue();
+            if (year == null || year.getString("start_date") == null || year.getString("end_date") == null) {
+                promise.complete(new JsonObject().put(Field.STATUS, "skipped").put(Field.MESSAGE, "no school year"));
+                return;
+            }
+            // L'année paramétrée peut être échue (rentrée non encore réinitialisée) : on la décale
+            // d'autant d'années qu'il faut pour couvrir aujourd'hui, sans toucher à la ligne YEAR.
+            LocalDate start = LocalDate.parse(year.getString("start_date"));
+            LocalDate end = LocalDate.parse(year.getString("end_date"));
+            LocalDate today = LocalDate.now();
+            while (today.isAfter(end)) {
+                start = start.plusYears(1);
+                end = end.plusYears(1);
+            }
+            refreshSchoolYears(structure, zone, start, end).onComplete(promise);
+        }));
+        return promise.future();
+    }
+
+    /**
+     * Remplace les périodes importées de l'année scolaire [start, end] et de la suivante.
+     * L'année suivante est facultative : le ministère peut ne pas l'avoir encore publiée.
+     * Si l'année en cours ne peut être récupérée, rien n'est supprimé.
+     */
+    private Future<JsonObject> refreshSchoolYears(String structure, String zone, LocalDate start, LocalDate end) {
+        Promise<JsonObject> promise = Promise.promise();
+        InitDateFuture current = new InitDateFuture(structure, zone, start.toString(), end.toString());
+        InitDateFuture next = new InitDateFuture(structure, zone, start.plusYears(1).toString(), end.plusYears(1).toString());
+
+        current.statements().add(new JsonObject()
+                .put(STATEMENT, "DELETE FROM viesco.setting_period WHERE id_structure = ? AND code = 'EXCLUSION' " +
+                        "AND source = '" + SOURCE_IMPORT + "' AND start_date >= to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS')")
+                .put(VALUES, new JsonArray().add(structure).add(current.schoolStartAt()))
+                .put(ACTION, PREPARED));
+
+        addExcludePeriod(current)
+                .compose(this::addHolidaysPeriod)
+                .compose(cur -> addExcludePeriod(next)
+                        .compose(this::addHolidaysPeriod)
+                        .map(InitDateFuture::statements)
+                        .recover(err -> {
+                            log.warn(String.format("[Edt@%s::refresh] Next school year not available for structure %s (%s): %s",
+                                    this.getClass().getSimpleName(), structure, zone, err.getMessage()));
+                            return Future.succeededFuture(new JsonArray());
+                        }))
+                .onSuccess(nextStatements -> {
+                    JsonArray statements = current.statements().copy().addAll(nextStatements);
+                    sql.transaction(statements, response -> {
+                        JsonObject body = response.body();
+                        if (body == null || !Field.OK.equals(body.getString(Field.STATUS))) {
+                            String error = body == null ? "no response" : body.getString(Field.MESSAGE, "transaction failed");
+                            log.error(String.format("[Edt@%s::refresh] Transaction failed for structure %s: %s",
+                                    this.getClass().getSimpleName(), structure, error));
+                            promise.fail(error);
+                        } else {
+                            promise.complete(new JsonObject()
+                                    .put(Field.STATUS, Field.OK)
+                                    .put(Field.ZONE, zone)
+                                    .put("schoolYears", new JsonArray()
+                                            .add(start.getYear() + "-" + end.getYear())
+                                            .add(start.getYear() + 1 + "-" + (end.getYear() + 1))));
+                        }
+                    });
+                })
+                .onFailure(err -> {
+                    log.error(String.format("[Edt@%s::refresh] Failed to refresh holidays of structure %s (%s): %s",
+                            this.getClass().getSimpleName(), structure, zone, err.getMessage()));
+                    promise.fail(err.getMessage());
+                });
+        return promise.future();
+    }
+
     /**
      * clear all dates (holidays, school period) from structure statement
      *
@@ -92,9 +179,11 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
      */
     private Future<InitDateFuture> clearDatesFromStructure(InitDateFuture initDateFuture, boolean initSchoolYear) {
         Promise<InitDateFuture> promise = Promise.promise();
-        String query = "DELETE FROM viesco.setting_period WHERE id_structure = ?";
-        if (!initSchoolYear)
-            query += " AND code != 'YEAR'";
+        // Seules les périodes importées sont remplacées : les exclusions saisies par
+        // l'établissement (source MANUAL) survivent à une réinitialisation.
+        String query = initSchoolYear
+                ? "DELETE FROM viesco.setting_period WHERE id_structure = ? AND (code = 'YEAR' OR source = '" + SOURCE_IMPORT + "')"
+                : "DELETE FROM viesco.setting_period WHERE id_structure = ? AND code != 'YEAR' AND source = '" + SOURCE_IMPORT + "'";
         initDateFuture.statements().add(new JsonObject()
                 .put(STATEMENT, query)
                 .put(VALUES, new JsonArray()
@@ -239,12 +328,9 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
      */
     private void insertExcludeDateStatement(InitDateFuture initDateFuture, JsonObject holidays) {
         if (holidays.isEmpty() || holidays.fieldNames().isEmpty()) return;
-        StringBuilder query = new StringBuilder("INSERT INTO viesco.setting_period (start_date, end_date, " +
-                "description, id_structure, is_opening, code) VALUES");
         JsonArray params = new JsonArray();
 
         for(String holiday : holidays.fieldNames()) {
-            query.append("(to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ?, ?, ?, ?),");
             params.add(holiday + " " + HOUR_START)
                     .add(holiday + " " + HOUR_END)
                     .add(holidays.getString(holiday))
@@ -252,9 +338,8 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
                     .add(false)
                     .add(Field.EXCLUSION);
         }
-        query = new StringBuilder(query.substring(0, query.length() - 1));
         initDateFuture.statements().add(new JsonObject()
-                .put(STATEMENT, query)
+                .put(STATEMENT, importInsertQuery(holidays.fieldNames().size()))
                 .put(VALUES, params )
                 .put(ACTION, PREPARED));
     }
@@ -391,7 +476,6 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
         }
 
         final JsonArray params = new JsonArray();
-        final StringBuilder query = new StringBuilder("INSERT INTO viesco.setting_period (start_date, end_date, description, id_structure, is_opening, code) VALUES ");
 
         // append the values and params for each holiday
         for (int i = 0; i < holidays.size(); i++) {
@@ -418,16 +502,6 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
                 endDateYYYYMMDD_HHMMSS = DateHelper.getDateString(endDateMinusOneDay, DateHelper.YEAR_MONTH_DAY) + " " + HOUR_END;
             }
 
-            // values
-            query.append("(")
-                    .append("to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ") // start_date
-                    .append("to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ") // end_date
-                    .append("?, ?, ?, ?") // description, structure_id, is_opening, code
-                    .append(")");
-            // add a comma if not the last element
-            if (i < holidays.size() - 1) {
-                query.append(",");
-            }
             // params
             params.add(startDateYYYYMMDD_HHMMSS)
                     .add(endDateYYYYMMDD_HHMMSS)
@@ -438,11 +512,33 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
         }
 
         final JsonObject statement = new JsonObject()
-                .put(STATEMENT, query.toString())
+                .put(STATEMENT, importInsertQuery(holidays.size()))
                 .put(VALUES, params)
                 .put(ACTION, PREPARED);
 
         initDateFuture.statements().add(statement);
+    }
+
+    /**
+     * Insertion de périodes importées (source IMPORT), sans doublonner une période identique
+     * (même établissement, mêmes dates et même libellé) déjà présente, par exemple une
+     * exclusion saisie à la main. Chaque ligne attend six paramètres : début, fin, libellé,
+     * établissement, is_opening, code.
+     */
+    static String importInsertQuery(int rows) {
+        StringBuilder query = new StringBuilder("INSERT INTO viesco.setting_period " +
+                "(start_date, end_date, description, id_structure, is_opening, code, source) " +
+                "SELECT v.start_date, v.end_date, v.description, v.id_structure, v.is_opening, v.code, '" + SOURCE_IMPORT + "' " +
+                "FROM (VALUES ");
+        for (int i = 0; i < rows; i++) {
+            if (i > 0) query.append(", ");
+            query.append(IMPORT_ROW);
+        }
+        query.append(") AS v (start_date, end_date, description, id_structure, is_opening, code) " +
+                "WHERE NOT EXISTS (SELECT 1 FROM viesco.setting_period p WHERE p.id_structure = v.id_structure " +
+                "AND p.code = v.code AND p.start_date = v.start_date AND p.end_date = v.end_date " +
+                "AND p.description IS NOT DISTINCT FROM v.description)");
+        return query.toString();
     }
 
     private String getEndDateHoliday(String startAt, String endAt) {

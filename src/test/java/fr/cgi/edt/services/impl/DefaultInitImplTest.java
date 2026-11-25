@@ -67,7 +67,7 @@ public class DefaultInitImplTest {
         InitDateFuture initDateFuture = new InitDateFuture("structure", "C", "2024-08-01 00:00:00", "2025-07-31 00:00:00");
 
         // expected data
-        String expectedQuery = "DELETE FROM viesco.setting_period WHERE id_structure = ?";
+        String expectedQuery = "DELETE FROM viesco.setting_period WHERE id_structure = ? AND (code = 'YEAR' OR source = 'IMPORT')";
         String expectedStructure = "structure";
 
         try {
@@ -77,6 +77,28 @@ public class DefaultInitImplTest {
         } catch (Exception e) {
             ctx.assertNull(e);
         }
+    }
+
+    @Test
+    public void testClearDatesFromStructure_WithoutSchoolYear_KeepsManualPeriods(TestContext ctx) {
+        InitDateFuture initDateFuture = new InitDateFuture("structure", "C", "2024-08-01 00:00:00", "2025-07-31 00:00:00");
+        try {
+            Future<InitDateFuture> res = Whitebox.invokeMethod(initService, "clearDatesFromStructure", initDateFuture, false);
+            ctx.assertEquals(res.result().statements().getJsonObject(0).getString("statement"),
+                    "DELETE FROM viesco.setting_period WHERE id_structure = ? AND code != 'YEAR' AND source = 'IMPORT'");
+        } catch (Exception e) {
+            ctx.assertNull(e);
+        }
+    }
+
+    @Test
+    public void testImportInsertQuery_TagsImportAndSkipsDuplicates(TestContext ctx) {
+        String query = DefaultInitImpl.importInsertQuery(2);
+        ctx.assertTrue(query.startsWith("INSERT INTO viesco.setting_period (start_date, end_date, description, id_structure, is_opening, code, source) "));
+        ctx.assertTrue(query.contains("'IMPORT' FROM (VALUES "));
+        ctx.assertEquals(query.split("::boolean", -1).length - 1, 2);
+        ctx.assertTrue(query.contains("WHERE NOT EXISTS (SELECT 1 FROM viesco.setting_period p"));
+        ctx.assertTrue(query.contains("p.description IS NOT DISTINCT FROM v.description"));
     }
 
     @Test
@@ -112,10 +134,7 @@ public class DefaultInitImplTest {
                 .put("2022-07-14", "14 février");
 
         // expected data
-        String expectedQuery = "INSERT INTO viesco.setting_period (start_date, end_date, description, id_structure, is_opening, code) " +
-                "VALUES" +
-                "(to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ?, ?, ?, ?)," +
-                "(to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ?, ?, ?, ?)";
+        String expectedQuery = DefaultInitImpl.importInsertQuery(2);
         JsonArray expectedParams = new JsonArray()
                 .add("2021-12-25 00:00:00")
                 .add("2021-12-25 23:59:59")
@@ -156,18 +175,16 @@ public class DefaultInitImplTest {
         List<HolidayRecord> holidayRecordList = Arrays.asList(holidayRecord1, holidayRecord2);
 
         // expected data
-        String expectedQuery = "INSERT INTO viesco.setting_period (start_date, end_date, description, id_structure, is_opening, code) VALUES" +
-                "(to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ?, ?, ?, ?)," +
-                "(to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), to_timestamp(?, 'YYYY-MM-DD HH24:MI:SS'), ?, ?, ?, ?)";
+        String expectedQuery = DefaultInitImpl.importInsertQuery(2);
         JsonArray expectedParams = new JsonArray()
-                .add("2021-12-17 00:00:00")
-                .add("2022-01-02 00:00:00")
+                .add("2021-12-18 00:00:00")
+                .add("2022-01-02 23:59:59")
                 .add("Noel")
                 .add(initDateFuture.structure())
                 .add(false)
                 .add(Field.EXCLUSION)
-                .add("2022-02-18 00:00:00")
-                .add("2022-03-06 00:00:00")
+                .add("2022-02-19 00:00:00")
+                .add("2022-03-06 23:59:59")
                 .add("Hiver")
                 .add(initDateFuture.structure())
                 .add(false)

@@ -399,5 +399,11 @@
   "edt.form.mediacentre.error": "The media centre search failed. Try again later.",
   "edt.form.close": "Close",
   "edt.timetable.show.saturday": "Show Saturday",
-  "edt.timetable.show.sunday": "Show Sunday"
+  "edt.timetable.show.sunday": "Show Sunday",
+  "edt.holidays.zone.academy": "Zone derived from the [[0]] academy.",
+  "edt.holidays.zone.manual": "Zone chosen by the school.",
+  "edt.holidays.zone.unknown": "The school's academy is unknown: choose its zone.",
+  "edt.holidays.zone.reset": "Back to the academy zone ([[0]])",
+  "edt.holidays.zone.reset.done": "Academy zone restored, holidays updated.",
+  "edt.holidays.auto": "The zone's school and public holidays are updated automatically every week. Closures entered by the school are kept."
 }

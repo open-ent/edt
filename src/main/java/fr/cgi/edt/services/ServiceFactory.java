@@ -3,6 +3,7 @@ package fr.cgi.edt.services;
 import fr.cgi.edt.core.constants.Field;
 import fr.cgi.edt.models.holiday.HolidaysConfig;
 import fr.cgi.edt.services.impl.DefaultCourseService;
+import fr.cgi.edt.services.impl.DefaultHolidaysService;
 import fr.cgi.edt.services.impl.DefaultInitImpl;
 import fr.wseduc.mongodb.MongoDb;
 import io.vertx.core.Vertx;
@@ -24,6 +25,8 @@ public class ServiceFactory {
 
     private final CourseService courseService;
 
+    private final HolidaysService holidaysService;
+
     public ServiceFactory(Vertx vertx, JsonObject config, Sql sql, Neo4j neo4j, MongoDb mongoDb) {
         this.vertx = vertx;
         this.sql = sql;
@@ -32,6 +35,7 @@ public class ServiceFactory {
         this.holidaysConfig = new HolidaysConfig(config.getJsonObject(Field.HOLIDAYS));
         this.initService = new DefaultInitImpl("edt", vertx, holidaysConfig);
         this.courseService = new DefaultCourseService(this);
+        this.holidaysService = new DefaultHolidaysService(vertx, sql, neo4j, holidaysConfig, initService);
     }
 
     public HolidaysConfig holidaysConfig() {
@@ -40,6 +44,10 @@ public class ServiceFactory {
 
     public InitService initService() {
         return initService;
+    }
+
+    public HolidaysService holidaysService() {
+        return holidaysService;
     }
 
     public CourseService courseService() {

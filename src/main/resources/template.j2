@@ -27,6 +27,7 @@
       "public-holidays": "{{ publicHolidays | default('https://calendrier.api.gouv.fr') }}",
       "school-holidays": "{{ schoolHolidays | default('https://data.education.gouv.fr') }}" 
     },
+    "holidays-refresh-cron": "{{ edtHolidaysRefreshCron | default('0 0 3 ? * MON') }}",
     "db-schema" : "edt",
     "dependencies" : {
         "fr.openent.viescolaire": "1.0.0"

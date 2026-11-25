@@ -6,6 +6,7 @@ import fr.cgi.edt.models.InitFormTimetable;
 import fr.cgi.edt.models.Timeslot;
 import fr.cgi.edt.services.CourseService;
 import fr.cgi.edt.services.CourseTagService;
+import fr.cgi.edt.services.HolidaysService;
 import fr.cgi.edt.services.InitService;
 import fr.cgi.edt.services.ServiceFactory;
 import fr.cgi.edt.services.impl.DefaultCourseTagService;
@@ -30,7 +31,10 @@ public class EventBusController extends ControllerHelper {
 
     private final CourseService courseService;
 
+    private final HolidaysService holidaysService;
+
     public EventBusController(ServiceFactory serviceFactory) {
+        this.holidaysService = serviceFactory.holidaysService();
         this.eb = serviceFactory.eventBus();
         this.courseTagService = new DefaultCourseTagService(serviceFactory.sql(), serviceFactory.mongoDb());
         this.initService = serviceFactory.initService();
@@ -58,6 +62,21 @@ public class EventBusController extends ControllerHelper {
                 String schoolYearStartDate = body.getString(Field.SCHOOLYEAR_START_DATE);
                 String schoolYearEndDate = body.getString(Field.SCHOOLYEAR_END_DATE);
                 this.initService.init(structureId, zone, initSchoolYear, schoolYearStartDate, schoolYearEndDate)
+                        .compose(v -> this.holidaysService.rememberInitZone(body.getString(Field.STRUCTUREID), zone)
+                                .otherwiseEmpty().map(v))
+                        .onFailure(e -> message.reply(new JsonObject()
+                                .put(Field.STATUS, Field.ERROR)
+                                .put(Field.MESSAGE, e.getMessage())))
+                        .onSuccess(v -> message.reply(
+                                new JsonObject()
+                                        .put(Field.STATUS, Field.OK)
+                                        .put(Field.RESULT, v)));
+                break;
+            case "get-holidays":
+                // Appel interne (agenda) : périodes de fermeture des établissements de l'usager.
+                // Ex. {action: "get-holidays", structureIds: ["…"], startDate: "2026-12-01", endDate: "2027-01-31"}
+                List<String> holidaysStructureIds = body.getJsonArray("structureIds", new JsonArray()).getList();
+                this.holidaysService.getHolidays(holidaysStructureIds, body.getString(Field.STARTDATE), body.getString(Field.ENDDATE))
                         .onFailure(e -> message.reply(new JsonObject()
                                 .put(Field.STATUS, Field.ERROR)
                                 .put(Field.MESSAGE, e.getMessage())))
