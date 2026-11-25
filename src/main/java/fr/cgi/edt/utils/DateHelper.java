@@ -315,6 +315,24 @@ public class DateHelper {
         }
     }
 
+    /**
+     * Jour civil à Paris ({@code yyyy-MM-dd}) d'un instant ISO 8601 avec décalage, indépendamment
+     * du fuseau de la JVM. Ex. {@code "2026-12-18T23:00:00+00:00"} → {@code "2026-12-19"}.
+     * Renvoie null si la date est absente ou illisible.
+     */
+    public static String toParisDay(String isoWithOffset) {
+        if (isoWithOffset == null) return null;
+        try {
+            return java.time.OffsetDateTime.parse(isoWithOffset)
+                    .atZoneSameInstant(java.time.ZoneId.of("Europe/Paris"))
+                    .toLocalDate()
+                    .toString();
+        } catch (java.time.format.DateTimeParseException err) {
+            LOGGER.error("[Edt@DateHelper::toParisDay] Failed to parse date " + isoWithOffset + ". " + err);
+            return null;
+        }
+    }
+
     public static Date parse(String date, String format) throws ParseException {
         SimpleDateFormat sdf = new SimpleDateFormat(format);
         return sdf.parse(date);

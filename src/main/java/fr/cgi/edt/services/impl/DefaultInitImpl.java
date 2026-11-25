@@ -482,14 +482,10 @@ public class DefaultInitImpl extends SqlCrudService implements InitService {
             final HolidayRecord holiday = holidays.get(i);
 
             // format start and end dates
-            final String startDateYYYYMMDD = DateHelper.getDateString(
-                    holiday.startAt(),
-                    DateHelper.DATA_GOUV_API_DATE_FORMAT,
-                    DateHelper.YEAR_MONTH_DAY);
-            final String endDateYYYYMMDD = DateHelper.getDateString(
-                    holiday.endAt(),
-                    DateHelper.DATA_GOUV_API_DATE_FORMAT,
-                    DateHelper.YEAR_MONTH_DAY);
+            // Jour civil à Paris, quel que soit le fuseau de la JVM (UTC en production) :
+            // « 2026-12-18T23:00:00+00:00 » est le samedi 19 décembre.
+            final String startDateYYYYMMDD = DateHelper.toParisDay(holiday.startAt());
+            final String endDateYYYYMMDD = DateHelper.toParisDay(holiday.endAt());
 
             final String startDateYYYYMMDD_HHMMSS = startDateYYYYMMDD + " " + HOUR_START;
             String endDateYYYYMMDD_HHMMSS = endDateYYYYMMDD + " " + HOUR_END;
