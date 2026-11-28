@@ -16,7 +16,7 @@
     "@open-ent/client": "2.5.30-patched",
     "@open-ent/react": "2.5.30-patched",
     "@tanstack/react-query": "5.62.7",
-    "i18next": "23.8.1",
+    "i18next": "26.3.4",
     "i18next-http-backend": "2.4.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -35,7 +35,7 @@
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
     "overrides": {
-      "i18next": "23.8.1",
+      "i18next": "26.3.4",
       "axios@>=1.0.0 <1.21.1": "^1.21.1",
       "follow-redirects@>=1.0.0 <1.16.3": "^1.16.3",
       "form-data@>=4.0.0 <4.0.6": "^4.0.6",
